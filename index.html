@@ -1,19 +1,76 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rupert's Page</title>
+    <style>
+        h1 span {
+            display: inline-block;
+        }
+
+        h1:hover span {
+            animation: wiggle 0.5s ease-in-out infinite alternate;
+        }
+
+        @keyframes wiggle {
+            from {
+                transform: rotate(-3deg);
+            }
+
+            to {
+                transform: rotate(3deg);
+            }
+        }
+
+        h2 {
+            display: inline-block;
+            transition: transform 0.2s ease-in-out;
+        }
+
+        h2:hover {
+            transform: rotate(-2deg) scale(1.04);
+        }
+
+        li a {
+            position: relative;
+            display: inline-block;
+        }
+
+        li a:hover {
+            animation: bounce 0.4s ease-in-out infinite alternate;
+        }
+
+        @keyframes bounce {
+            from {
+                transform: translateY(0);
+            }
+
+            to {
+                transform: translateY(-4px);
+            }
+        }
+    </style>
 </head>
+
 <body>
-    <h1>Hello World</h1>
+    <h1><span>Welcome to Rupert's Page</span></h1>
+    <h2>Bus Website</h2>
     <ul>
         <li><a href="buses/">Buses</a></li>
-        <li><a href="articles_of_association/">Articles of Association</a></li>
+    </ul>
+    <h2>Maths Games</h2>
+    <ul>
         <li><a href="maths_blaster/">Maths blaster</a></li>
-        <li><a href="breakout_maths_original/">Breakout maths</a></li>
-        <li><a href="breakout_maths/">Breakout maths 2</a></li>
+        <li><a href="breakout_maths_original/">Breakout maths (original/old)</a></li>
+        <li><a href="breakout_maths/">Breakout maths</a></li>
+    </ul>
+    <h2>Maths Utilities</h2>
+    <ul>
+        <li><a href="zoomable_numberline/">Zoomable Numberline</a></li>
     </ul>
 
 </body>
+
 </html>
