@@ -1,4 +1,3 @@
-implementation plan:
 
 Okay, this is an excellent strategy. A step-by-step plan with small, verifiable increments is perfect for building complex applications, especially when coordinating with an LLM.
 
