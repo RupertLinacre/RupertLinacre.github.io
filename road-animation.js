@@ -1,5 +1,5 @@
 // Road Animation with Buses
-// Procedurally generated curved roads with animated bus emojis
+// Procedurally generated curved roads with animated bus images
 // Uses Poisson disk sampling, Delaunay triangulation, and intersection avoidance
 
 (function () {
@@ -10,6 +10,25 @@
 
     let roadSegments = [];
     let buses = [];
+
+    // Load bus images
+    const busImages = [];
+    const busImageSrcs = ['bus1.png', 'bus2.png'];
+    let imagesLoaded = 0;
+
+    busImageSrcs.forEach((src, index) => {
+        const img = new Image();
+        img.onload = () => {
+            imagesLoaded++;
+            if (imagesLoaded === busImageSrcs.length) {
+                // All images loaded, start animation
+                resizeCanvas();
+                animate();
+            }
+        };
+        img.src = src;
+        busImages[index] = img;
+    });
 
     function resizeCanvas() {
         canvas.width = window.innerWidth;
@@ -472,10 +491,10 @@
         const bus = {
             segmentIndex: segmentIndex,
             progress: Math.random(),
-            speed: 0.003 + Math.random() * 0.004,
+            speed: 0.002 + Math.random() * 0.003,
             direction: Math.random() > 0.5 ? 1 : -1,
-            emoji: ['🚌', '🚍', '🚎'][Math.floor(Math.random() * 3)],
-            currentAngle: 0
+            imageIndex: Math.floor(Math.random() * busImages.length),
+            facingRight: true // Track which way the bus is facing
         };
 
         buses.push(bus);
@@ -565,30 +584,46 @@
     }
 
     function drawBuses() {
-        ctx.font = '22px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-
         buses.forEach(bus => {
             const segment = roadSegments[bus.segmentIndex];
             if (!segment) return;
 
             const point = getPointOnSegment(segment, bus.progress);
-            let targetAngle = point.angle;
+            let angle = point.angle;
+
+            // Adjust angle based on direction of travel
             if (bus.direction === -1) {
-                targetAngle += Math.PI;
+                angle += Math.PI;
             }
 
-            // Smooth angle transition
-            let angleDiff = targetAngle - bus.currentAngle;
-            while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-            while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-            bus.currentAngle += angleDiff * 0.15;
+            // Normalize angle to -PI to PI
+            while (angle > Math.PI) angle -= Math.PI * 2;
+            while (angle < -Math.PI) angle += Math.PI * 2;
+
+            // Determine if bus should face right or left based on horizontal movement
+            // Bus images face right by default
+            // Mirror horizontally if traveling rightward (angle between -PI/2 and PI/2, i.e., |angle| <= PI/2)
+            const facingRight = Math.abs(angle) <= Math.PI / 2;
+
+            const img = busImages[bus.imageIndex];
+            if (!img || !img.complete) return;
+
+            // Scale bus to 35 pixels high
+            const targetHeight = 35;
+            const scale = targetHeight / img.height;
+            const width = img.width * scale;
+            const height = targetHeight;
 
             ctx.save();
             ctx.translate(point.x, point.y);
-            ctx.rotate(bus.currentAngle);
-            ctx.fillText(bus.emoji, 0, 0);
+
+            if (facingRight) {
+                // Mirror horizontally for rightward travel (images face left by default)
+                ctx.scale(-1, 1);
+            }
+
+            // Draw bus centered at position
+            ctx.drawImage(img, -width / 2, -height / 2, width, height);
             ctx.restore();
         });
     }
@@ -605,6 +640,11 @@
     }
 
     window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
-    animate();
+
+    // Only start if images aren't loaded yet (they'll trigger resizeCanvas and animate when ready)
+    // If images are already cached and loaded synchronously, start now
+    if (imagesLoaded === busImageSrcs.length) {
+        resizeCanvas();
+        animate();
+    }
 })();
