@@ -6,6 +6,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rupert's Page</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            padding: 20px;
+            position: relative;
+        }
+
+        #road-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+
+        .content {
+            position: relative;
+            z-index: 1;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
         h1 span {
             display: inline-block;
         }
@@ -55,32 +86,36 @@
 </head>
 
 <body>
-    <h1><span>Welcome to Rupert's Page</span></h1>
-    <h2>Bus Website</h2>
-    <ul>
-        <li><a href="buses/">Buses</a></li>
-    </ul>
-    <h2>Maths Games</h2>
-    <ul>
-        <li><a href="maths_blaster/">Maths blaster</a></li>
-        <li><a href="breakout_maths/">Breakout maths</a></li>
-        <li><a href="snakey_maths/">Snakey maths</a></li>
-        <li><a href="maths_vs_monsters/">Maths vs monsters</a></li>
-    </ul>
+    <canvas id="road-canvas"></canvas>
+    <div class="content">
+        <h1><span>Welcome to Rupert's Page</span></h1>
+        <h2>Bus Website</h2>
+        <ul>
+            <li><a href="buses/">Buses</a></li>
+        </ul>
+        <h2>Maths Games</h2>
+        <ul>
+            <li><a href="maths_blaster/">Maths blaster</a></li>
+            <li><a href="breakout_maths/">Breakout maths</a></li>
+            <li><a href="snakey_maths/">Snakey maths</a></li>
+            <li><a href="maths_vs_monsters/">Maths vs monsters</a></li>
+        </ul>
 
-    <h2>Maths Quizes</h2>
-    <ul>
-        <li><a href="numberline_quiz/">Numberline quiz</a></li>
-    </ul>
-    <h2>Maths Utilities</h2>
-    <ul>
-        <li><a href="zoomable_fractions_numberline/">Fraction/Decimal interactive zoomable numberline</a></li>
-        <li><a href="fractal_numberline/">Recursive Zoomable Numberline</a></li>
-        <li><a href="zoomable_numberline/">Summary/detail Zoomable Numberline</a></li>
-        <li><a href="fraction_addition_visualisation/">Fraction Addition Visualisation</a></li>
-        <li><a href="d3_regrouping_exchanging">Regrouping/Exchanging Visualisation</a></li>
-    </ul>
+        <h2>Maths Quizes</h2>
+        <ul>
+            <li><a href="numberline_quiz/">Numberline quiz</a></li>
+        </ul>
+        <h2>Maths Utilities</h2>
+        <ul>
+            <li><a href="zoomable_fractions_numberline/">Fraction/Decimal interactive zoomable numberline</a></li>
+            <li><a href="fractal_numberline/">Recursive Zoomable Numberline</a></li>
+            <li><a href="zoomable_numberline/">Summary/detail Zoomable Numberline</a></li>
+            <li><a href="fraction_addition_visualisation/">Fraction Addition Visualisation</a></li>
+            <li><a href="d3_regrouping_exchanging">Regrouping/Exchanging Visualisation</a></li>
+        </ul>
+    </div>
 
+    <script src="road-animation.js"></script>
 </body>
 
 </html>
