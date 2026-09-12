@@ -12,9 +12,16 @@
             box-sizing: border-box;
         }
 
+        :root {
+            color-scheme: light;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            color: #304c43;
+            background: #cbdab8;
+        }
+
         body {
             min-height: 100vh;
-            padding: 20px;
+            padding: 32px 20px 120px;
             position: relative;
         }
 
@@ -24,21 +31,29 @@
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: -1;
+            z-index: 0;
+            pointer-events: none;
         }
 
         .content {
             position: relative;
             z-index: 1;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 30px 40px;
-            border-radius: 10px;
-            max-width: 800px;
+            background: rgba(255, 253, 246, 0.95);
+            padding: 34px 38px;
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 8px 40px #314d3b18, 0 1px 5px #314d3b10;
+            border-radius: 18px;
+            max-width: 680px;
             margin: 0 auto;
+            transition: opacity 180ms ease;
         }
 
         h1 {
-            margin-bottom: 0.5em;
+            font-family: Georgia, "Times New Roman", serif;
+            font-size: clamp(27px, 4vw, 35px);
+            font-weight: 500;
+            letter-spacing: -1.2px;
+            margin-bottom: 10px;
         }
 
         h1 span {
@@ -62,8 +77,8 @@
         h2 {
             display: inline-block;
             transition: transform 0.2s ease-in-out;
-            margin-top: 1.2em;
-            margin-bottom: 0.5em;
+            font-size: 15px;
+            margin-bottom: 10px;
         }
 
         h2:hover {
@@ -71,22 +86,26 @@
         }
 
         ul {
-            margin-left: 1.5em;
-            margin-bottom: 0.5em;
+            list-style: none;
         }
 
         li {
-            margin-bottom: 0.3em;
+            margin-bottom: 6px;
             line-height: 1.5;
+            font-size: 13px;
         }
 
         li a {
             position: relative;
             display: inline-block;
+            color: #587568;
+            text-decoration-color: #bdcbbb;
+            text-underline-offset: 3px;
         }
 
         li a:hover {
-            animation: bounce 0.4s ease-in-out infinite alternate;
+            color: #b95a42;
+            text-decoration-color: currentColor;
         }
 
         @keyframes bounce {
@@ -98,18 +117,146 @@
                 transform: translateY(-4px);
             }
         }
+
+        .eyebrow {
+            color: #7e8d76;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+
+        .intro {
+            font-size: 13px;
+            line-height: 1.6;
+            color: #7c8a79;
+            padding-bottom: 25px;
+            border-bottom: 1px solid #e0e5d6;
+        }
+
+        .link-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px 32px;
+            padding-top: 25px;
+        }
+
+        .town-label {
+            position: fixed;
+            top: 26px;
+            left: 27px;
+            z-index: 2;
+            padding: 14px 17px;
+            border: 1px solid #fffdf3b3;
+            background: #fffdf0e8;
+            box-shadow: 0 3px 16px #314d3b10;
+            border-radius: 12px;
+            pointer-events: none;
+        }
+
+        .town-label .eyebrow { margin-bottom: 7px; }
+        .town-label p:last-child { font-size: 11px; color: #738272; }
+        .route-key { display: flex; gap: 7px; margin: 12px 0 9px; }
+        .route-key span { color: #fff9eb; font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 4px; }
+        .route-12 { background: #cf5249; }
+        .route-24 { background: #258b8a; }
+        .route-36 { background: #cc933c; }
+
+        .town-controls {
+            position: fixed;
+            bottom: 22px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 3;
+            width: max-content;
+            max-width: calc(100% - 28px);
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            padding: 10px 12px 10px 20px;
+            background: #fffdf4f5;
+            border: 1px solid #ffffffc9;
+            border-radius: 15px;
+            box-shadow: 0 5px 24px #243d3426;
+        }
+
+        .town-controls[hidden] { display: none; }
+        .town-caption { font-size: 12px; white-space: nowrap; }
+        .town-caption small { display: block; font-size: 10px; color: #85907c; margin-top: 4px; }
+        .live-dot { display: inline-block; width: 6px; height: 6px; background: #79a275; border-radius: 50%; margin-right: 5px; }
+        .town-paused .live-dot { background: #c6a368; }
+        .town-actions { display: flex; gap: 6px; }
+
+        button {
+            border: 1px solid #dce2d3;
+            background: transparent;
+            color: #476151;
+            font: inherit;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 0 13px;
+            min-height: 42px;
+            white-space: nowrap;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 150ms ease, border-color 150ms ease;
+        }
+
+        button:hover { background: #e9eedf; border-color: #b8c9ad; }
+        #new-town { background: #355d4c; color: #fff9e9; border-color: #355d4c; }
+        #new-town:hover { background: #244b3b; }
+        :focus-visible { outline: 3px solid #c58c40; outline-offset: 4px; }
+        .exploring-town { overflow: hidden; }
+        .exploring-town .content { opacity: 0; visibility: hidden; pointer-events: none; }
+        .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+        @media (max-width: 1120px) {
+            .town-label { display: none; }
+            .exploring-town .town-label { display: block; }
+        }
+
+        @media (max-width: 600px) {
+            body { padding: 16px 14px 145px; }
+            .content { padding: 25px 23px; border-radius: 14px; }
+            .link-grid { grid-template-columns: 1fr; gap: 23px; }
+            li { font-size: 14px; margin-bottom: 9px; }
+            h2 { font-size: 16px; }
+            .town-controls { bottom: max(12px, env(safe-area-inset-bottom)); padding: 12px; flex-direction: column; gap: 10px; width: 370px; }
+            .town-caption { text-align: center; font-size: 11px; }
+            .town-caption small { display: none; }
+            .town-actions { width: 100%; }
+            button { flex: 1; padding: 0 9px; font-size: 11px; min-height: 44px; }
+            .town-label { top: 16px; left: 16px; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation: none !important; transition: none !important; }
+        }
     </style>
 </head>
 
 <body>
-    <canvas id="road-canvas"></canvas>
-    <div class="content">
+    <canvas id="road-canvas" aria-hidden="true"></canvas>
+    <aside class="town-label" aria-label="About the generated town">
+        <p class="eyebrow" id="town-number">A little town</p>
+        <p>Every visit, a new neighbourhood.</p>
+        <div class="route-key" aria-label="Bus routes 12, 24 and 36"><span class="route-12">12</span><span class="route-24">24</span><span class="route-36">36</span></div>
+        <p><span id="bus-count">Buses</span> &middot; <span id="car-count">cars</span> &middot; a little everyday life</p>
+    </aside>
+    <main class="content" id="page-content">
+        <p class="eyebrow">Buses, games &amp; little discoveries</p>
         <h1><span>Welcome to Rupert's Page</span></h1>
+        <p class="intro">A few things to play, explore and get curious about.</p>
+        <div class="link-grid">
+        <section>
         <h2>Bus Website</h2>
         <ul>
             <li><a href="buses/">Buses</a></li>
             <li><a href="https://rupertlinacre.com/buslens/">BusLens</a></li>
         </ul>
+        </section>
+        <section>
         <h2>Maths Games</h2>
         <ul>
             <li><a href="maths_blaster/">Maths blaster</a></li>
@@ -119,11 +266,14 @@
             <li><a href="number_lanes/">Number lanes</a></li>
             <li><a href="arithmetic_annihilation/">Arithmetic annihilation</a></li>
         </ul>
-
-        <h2>Maths Quizes</h2>
+        </section>
+        <section>
+        <h2>Maths Quizzes</h2>
         <ul>
             <li><a href="numberline_quiz/">Numberline quiz</a></li>
         </ul>
+        </section>
+        <section>
         <h2>Maths Utilities</h2>
         <ul>
             <li><a href="fraction_vis/">Fraction explorer</a></li>
@@ -135,6 +285,8 @@
             <li><a href="d3_regrouping_exchanging">Regrouping/Exchanging Visualisation</a></li>
             <li><a href="decimal_placement_vis/">Decimal placement vis</a></li>
         </ul>
+        </section>
+        <section>
         <h2>Learning to Read and Write</h2>
         
         <ul>
@@ -146,6 +298,8 @@
             <li><a href="https://www.robinlinacre.com/letter_constellations/">Letter Constellations</a></li>
         
         </ul>
+        </section>
+        <section>
         <h2>Other games</h2>
         <ul>
             <li><a href="vocab_annihilation/">Vocab annihilation</a></li>
@@ -153,9 +307,21 @@
             <li><a href="uk_town_city_quiz/">UK largest cities/towns quiz</a></li>
             <li><a href="english_monarchs_quiz/">English monarchs quiz</a></li>
         </ul>
-    </div>
+        </section>
+        </div>
+    </main>
 
-    <script src="road-animation.js"></script>
+    <div class="town-controls" id="town-controls" role="group" aria-label="Town animation controls" hidden>
+        <div class="town-caption"><span class="live-dot" aria-hidden="true"></span><span id="town-state">A little town, alive</span><small>Made afresh, just for this visit.</small></div>
+        <div class="town-actions">
+            <button type="button" id="pause-town" aria-label="Pause town animation" aria-pressed="false">Pause</button>
+            <button type="button" id="explore-town" aria-pressed="false">Watch the town</button>
+            <button type="button" id="new-town">New town <span aria-hidden="true">&#x21bb;</span></button>
+        </div>
+    </div>
+    <p class="sr-only" id="town-status" role="status" aria-live="polite"></p>
+
+    <script type="module" src="road-animation.js?v=2"></script>
 </body>
 
 </html>
