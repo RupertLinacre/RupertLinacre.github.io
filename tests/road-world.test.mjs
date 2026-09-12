@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTown, updateTown, signalState, vehiclePoint, GAP } from '../road-world.mjs';
+import { createTown, updateTown, setTrafficLevel, signalState, vehiclePoint, GAP } from '../road-world.mjs';
 
 const step = 1 / 60;
 function advance(town, seconds) {
@@ -55,6 +55,50 @@ test('signals have amber and all-red clearance and never release both axes toget
         allRed ||= x === 'red' && y === 'red';
     }
     assert.ok(amber && allRed);
+});
+
+test('streets include curved lane geometry, diagonal connections, and irregular blocks', () => {
+    const town = createTown(2200, 1700, 42);
+    assert.ok(town.edges.some(edge => edge.diagonal));
+    assert.ok(town.edges.some(edge => edge.path.length > Math.hypot(edge.b.x - edge.a.x, edge.b.y - edge.a.y) + 1));
+    assert.ok(town.edges.filter(edge => !edge.diagonal).some(edge =>
+        Math.abs(edge.a.x - edge.b.x) > 40 && Math.abs(edge.a.y - edge.b.y) > 40));
+    assert.ok(town.nodes.some(node => node.outgoing.length === 5));
+    assert.ok(town.blocks.every(block => block.polygon.length > 3));
+    for (const lane of town.lanes) {
+        assert.ok(lane.length > 50, 'junctions must leave usable lane space');
+        assert.ok(lane.path.points.every(p => Number.isFinite(p.x) && Number.isFinite(p.y)));
+    }
+});
+
+test('live traffic changes preserve the town, insert safely, and release reservations when removing vehicles', () => {
+    const town = createTown(1800, 1200, 94);
+    advance(town, 30);
+    const edges = town.edges;
+    const routes = town.routes;
+    const time = town.time;
+    const previous = new Map(town.vehicles.map(v => [v.id, vehiclePoint(v)]));
+    const initialCount = town.vehicles.length;
+    setTrafficLevel(town, 2);
+    assert.ok(town.vehicles.length > initialCount);
+    assert.equal(town.edges, edges);
+    assert.equal(town.routes, routes);
+    assert.equal(town.time, time);
+    for (const vehicle of town.vehicles) {
+        if (previous.has(vehicle.id)) assert.deepEqual(vehiclePoint(vehicle), previous.get(vehicle.id));
+    }
+    assert.equal(new Set(town.vehicles.map(v => v.id)).size, town.vehicles.length);
+    advance(town, 20);
+    setTrafficLevel(town, 0);
+    assert.equal(town.vehicles.length, 0);
+    assert.ok(town.nodes.every(node => node.owner === null));
+    advance(town, 1);
+    setTrafficLevel(town, 1);
+    assert.ok(town.vehicles.some(v => v.bus));
+    assert.ok(town.vehicles.some(v => !v.bus));
+    assert.ok(town.vehicles.every(v => !previous.has(v.id)), 'vehicle IDs must not be reused');
+    advance(town, 60);
+    assert.ok(town.vehicles.some(v => v.distanceTravelled > 150));
 });
 
 test('cars stop before a red light and depart when it turns green', () => {

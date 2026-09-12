@@ -1,7 +1,7 @@
 // The town and its traffic share a directed road graph. Distances are in world
 // pixels; the renderer can scale it independently of the simulation clock.
 export const ROAD = 44;
-export const JUNCTION = 31;
+export const JUNCTION = 36;
 export const LANE = 11;
 export const GAP = 9;
 export const ROUTES = [
@@ -53,19 +53,65 @@ export function signalState(node, axis, time) {
 }
 
 export function lanePoint(lane, distance) {
-    return {
-        x: lane.start.x + lane.dx * distance,
-        y: lane.start.y + lane.dy * distance,
-        angle: Math.atan2(lane.dy, lane.dx),
-    };
+    return pathPoint(lane.path, distance);
+}
+
+function measure(points) {
+    let length = 0;
+    points.forEach((point, i) => {
+        if (i) length += Math.hypot(point.x - points[i - 1].x, point.y - points[i - 1].y);
+        point.distance = length;
+    });
+    return { points, length };
+}
+
+export function pathPoint(path, distance) {
+    const points = path.points;
+    distance = Math.max(0, Math.min(path.length, distance));
+    let low = 1;
+    let high = points.length - 1;
+    while (low < high) {
+        const mid = (low + high) >>> 1;
+        if (points[mid].distance < distance) low = mid + 1;
+        else high = mid;
+    }
+    const a = points[low - 1];
+    const b = points[low];
+    const t = (distance - a.distance) / (b.distance - a.distance || 1);
+    const angle = a.angle === undefined ? Math.atan2(b.y - a.y, b.x - a.x) :
+        a.angle + Math.atan2(Math.sin(b.angle - a.angle), Math.cos(b.angle - a.angle)) * t;
+    return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, angle };
+}
+
+export function offsetPath(path, offset, start = 0, end = path.length) {
+    const count = Math.max(2, Math.ceil((end - start) / 4));
+    return measure(Array.from({ length: count + 1 }, (_, i) => {
+        const p = pathPoint(path, start + (end - start) * i / count);
+        return { x: p.x + Math.sin(p.angle) * offset, y: p.y - Math.cos(p.angle) * offset, angle: p.angle };
+    }));
+}
+
+function curveBetween(a, b, bend) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const length = Math.hypot(dx, dy);
+    return measure(Array.from({ length: 81 }, (_, i) => {
+        const t = i / 80;
+        // A smooth bow with straight approaches keeps the junction mouths clear.
+        const u = Math.max(0, Math.min(1, (t - 0.25) / 0.5));
+        const bulge = Math.sin(Math.PI * u) ** 2 * bend;
+        const derivative = t > 0.25 && t < 0.75 ? Math.PI * Math.sin(2 * Math.PI * u) * bend / 0.5 : 0;
+        return { x: a.x + dx * t - dy / length * bulge, y: a.y + dy * t + dx / length * bulge,
+            angle: Math.atan2(dy + dx / length * derivative, dx - dy / length * derivative) };
+    }));
 }
 
 function makeTurn(incoming, outgoing) {
     const p0 = incoming.end;
     const p3 = outgoing.start;
     const reach = Math.hypot(p3.x - p0.x, p3.y - p0.y) * 0.55;
-    const p1 = { x: p0.x + incoming.dx * reach, y: p0.y + incoming.dy * reach };
-    const p2 = { x: p3.x - outgoing.dx * reach, y: p3.y - outgoing.dy * reach };
+    const p1 = { x: p0.x + Math.cos(p0.angle) * reach, y: p0.y + Math.sin(p0.angle) * reach };
+    const p2 = { x: p3.x - Math.cos(p3.angle) * reach, y: p3.y - Math.sin(p3.angle) * reach };
     const points = [];
     let length = 0;
     for (let i = 0; i <= 32; i++) {
@@ -83,21 +129,15 @@ function makeTurn(incoming, outgoing) {
 
 export function vehiclePoint(vehicle) {
     if (vehicle.phase === 'lane') return lanePoint(vehicle.lane, vehicle.distance);
-    const points = vehicle.turn.points;
-    let i = 1;
-    while (i < points.length - 1 && points[i].distance < vehicle.distance) i++;
-    const a = points[i - 1];
-    const b = points[i];
-    const t = Math.max(0, Math.min(1, (vehicle.distance - a.distance) / (b.distance - a.distance || 1)));
-    return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, angle: Math.atan2(b.y - a.y, b.x - a.x) };
+    return pathPoint(vehicle.turn, vehicle.distance);
 }
 
 export function createTown(width, height, seed) {
     const random = randomSource(seed);
     const choose = items => items[Math.floor(random() * items.length)];
     function coordinates(size) {
-        const values = [-90 - random() * 65];
-        while (values.at(-1) < size + 90) values.push(values.at(-1) + 180 + random() * 95);
+        const values = [-210 - random() * 60];
+        while (values.at(-1) < size + 240) values.push(values.at(-1) + 245 + random() * 85);
         return values;
     }
     const xs = coordinates(width);
@@ -106,24 +146,31 @@ export function createTown(width, height, seed) {
     const edges = [];
     const lanes = [];
     const blocks = [];
+    const wave = random() * Math.PI * 2;
     const grid = ys.map((y, row) => xs.map((x, col) => {
-        const node = { id: nodes.length, x, y, row, col, outgoing: [], owner: null,
+        const node = { id: nodes.length,
+            x: x + Math.sin(y / 430 + wave) * 90 + (random() - 0.5) * 42,
+            y: y + Math.sin(x / 480 + wave) * 90 + (random() - 0.5) * 42,
+            row, col, outgoing: [], owner: null, radius: JUNCTION,
             signal: false, offset: random() * 22, cycle: 19 + random() * 6 };
         nodes.push(node);
         return node;
     }));
-    function connect(a, b) {
+    let nextEdgeId = 0;
+    let nextLaneId = 0;
+    const boundaries = new Map();
+    const edgeKey = (a, b) => [a.id, b.id].sort((x, y) => x - y).join(':');
+    function connect(a, b, diagonal = false) {
         const distance = Math.hypot(b.x - a.x, b.y - a.y);
-        const edge = { id: edges.length, a, b, axis: a.row === b.row ? 'x' : 'y', lanes: [] };
+        const edge = { id: nextEdgeId++, a, b, diagonal,
+            axis: Math.abs(b.x - a.x) > Math.abs(b.y - a.y) ? 'x' : 'y', lanes: [],
+            path: curveBetween(a, b, diagonal ? 0 : (random() - 0.5) * 34) };
         edges.push(edge);
+        boundaries.set(edgeKey(a, b), edge);
         for (const [from, to] of [[a, b], [b, a]]) {
             const dx = (to.x - from.x) / distance;
             const dy = (to.y - from.y) / distance;
-            const lane = { id: lanes.length, edge, from, to, dx, dy, axis: edge.axis,
-                length: distance - JUNCTION * 2,
-                start: { x: from.x + dx * JUNCTION + dy * LANE, y: from.y + dy * JUNCTION - dx * LANE },
-                end: { x: to.x - dx * JUNCTION + dy * LANE, y: to.y - dy * JUNCTION - dx * LANE },
-                stop: null };
+            const lane = { id: nextLaneId++, edge, from, to, dx, dy, axis: edge.axis, stop: null };
             lanes.push(lane);
             edge.lanes.push(lane);
             from.outgoing.push(lane);
@@ -145,11 +192,67 @@ export function createTown(width, height, seed) {
             for (const lane of edge.lanes) lanes.splice(lanes.indexOf(lane), 1);
         }
     }
-    for (const node of nodes) node.signal = node.outgoing.length >= 3;
+    function minimumAngle(node, extra) {
+        const directions = node.outgoing.map(l => Math.atan2(l.dy, l.dx));
+        if (extra) directions.push(Math.atan2(extra.y - node.y, extra.x - node.x));
+        directions.sort((a, b) => a - b);
+        return Math.min(...directions.map((angle, i) =>
+            (directions[(i + 1) % directions.length] - angle + Math.PI * 2) % (Math.PI * 2)));
+    }
+    const diagonals = new Map();
     for (let r = 0; r < ys.length - 1; r++) {
         for (let c = 0; c < xs.length - 1; c++) {
-            blocks.push({ x: xs[c] + 35, y: ys[r] + 35, width: xs[c + 1] - xs[c] - 70,
-                height: ys[r + 1] - ys[r] - 70, kind: choose(['homes', 'homes', 'shops', 'park']), seed: random() * 4294967296 });
+            if (random() > 0.3) continue;
+            const reverse = random() > 0.5;
+            const a = grid[r][c + (reverse ? 1 : 0)];
+            const b = grid[r + 1][c + (reverse ? 0 : 1)];
+            if (a.outgoing.length >= 5 || b.outgoing.length >= 5 ||
+                minimumAngle(a, b) < 0.72 || minimumAngle(b, a) < 0.72) continue;
+            connect(a, b, true);
+            diagonals.set(`${r}:${c}`, reverse);
+        }
+    }
+    for (const node of nodes) {
+        node.signal = node.outgoing.length >= 3;
+        // Acute and five-way junctions need more clearance than square corners.
+        node.radius = Math.max(JUNCTION, 31 / Math.tan(minimumAngle(node) / 2));
+    }
+    for (const lane of lanes) {
+        const reverse = lane.from !== lane.edge.a;
+        const center = reverse ? measure([...lane.edge.path.points].reverse().map(p =>
+            ({ x: p.x, y: p.y, angle: p.angle + Math.PI }))) : lane.edge.path;
+        lane.path = offsetPath(center, LANE, lane.from.radius, center.length - lane.to.radius);
+        lane.length = lane.path.length;
+        lane.start = pathPoint(lane.path, 0);
+        lane.end = pathPoint(lane.path, lane.length);
+    }
+    function addBlock(corners) {
+        const polygon = corners.flatMap((a, i) => {
+            const b = corners[(i + 1) % corners.length];
+            const edge = boundaries.get(edgeKey(a, b));
+            const points = edge.a === a ? edge.path.points : [...edge.path.points].reverse();
+            return points.slice(0, -1).map(p => ({ x: p.x, y: p.y }));
+        });
+        const center = { x: corners.reduce((sum, p) => sum + p.x, 0) / corners.length,
+            y: corners.reduce((sum, p) => sum + p.y, 0) / corners.length };
+        let angle = Math.atan2(corners[1].y - corners[0].y, corners[1].x - corners[0].x);
+        while (angle > Math.PI / 4) angle -= Math.PI / 2;
+        while (angle < -Math.PI / 4) angle += Math.PI / 2;
+        const local = polygon.map(p => ({ x: (p.x - center.x) * Math.cos(angle) + (p.y - center.y) * Math.sin(angle),
+            y: -(p.x - center.x) * Math.sin(angle) + (p.y - center.y) * Math.cos(angle) }));
+        const x = Math.min(...local.map(p => p.x));
+        const y = Math.min(...local.map(p => p.y));
+        blocks.push({ x, y, width: Math.max(...local.map(p => p.x)) - x,
+            height: Math.max(...local.map(p => p.y)) - y, center, angle, polygon: local,
+            kind: corners.length === 3 ? 'park' : choose(['homes', 'homes', 'shops', 'park']), seed: random() * 4294967296 });
+    }
+    for (let r = 0; r < ys.length - 1; r++) {
+        for (let c = 0; c < xs.length - 1; c++) {
+            const [a, b, d, e] = [grid[r][c], grid[r][c + 1], grid[r + 1][c + 1], grid[r + 1][c]];
+            const diagonal = diagonals.get(`${r}:${c}`);
+            if (diagonal === false) { addBlock([a, b, d]); addBlock([a, d, e]); }
+            else if (diagonal === true) { addBlock([a, b, e]); addBlock([b, d, e]); }
+            else addBlock([a, b, d, e]);
         }
     }
     // Each numbered bus line is a repeatable circuit through four neighbourhoods.
@@ -171,34 +274,62 @@ export function createTown(width, height, seed) {
         });
         return { ...style, path };
     });
-    const vehicles = [];
-    const carColours = ['#efe9d9', '#537d9b', '#d68563', '#e4b94f', '#718978', '#a7b9bc', '#49556a'];
-    function addVehicle(bus, route = null, routeIndex = 0) {
-        const lane = route ? route.path[routeIndex] : choose(lanes);
-        const length = bus ? 34 : 21 + random() * 4;
-        const distance = 24 + random() * Math.max(0, lane.length - 65);
-        if (vehicles.some(v => v.lane === lane && Math.abs(v.distance - distance) < (v.length + length) / 2 + GAP + 6)) return false;
-        vehicles.push({ id: vehicles.length, bus, route, routeIndex, lane, length,
-            width: bus ? 14 : 11, distance, phase: 'lane', speed: 0,
-            maxSpeed: bus ? 29 + random() * 4 : 32 + random() * 13,
-            colour: route ? route.colour : choose(carColours), next: null, turn: null,
-            reserved: null, dwell: 0, served: !!lane.stop && distance > lane.stop.distance - 2,
-            stopsVisited: 0, distanceTravelled: 0, braking: false });
-        return true;
-    }
-    for (const route of routes) {
-        const count = Math.max(2, Math.round(route.path.length / 7));
-        for (let i = 0; i < count; i++) {
-            for (let attempt = 0; attempt < 12; attempt++) {
-                if (addVehicle(true, route, (Math.floor(i * route.path.length / count) + attempt) % route.path.length)) break;
-            }
+    const town = { width, height, seed, random, nodes, edges, lanes, blocks, routes, vehicles: [],
+        time: 0, nextVehicleId: 0, trafficLevel: 1,
+        baseTraffic: Math.min(420, Math.max(18, Math.round(lanes.length * 0.65))) };
+    routes.forEach(route => { route.baseBuses = Math.max(2, Math.round(route.path.length / 7)); });
+    setTrafficLevel(town, 1);
+    return town;
+}
+
+const CAR_COLOURS = ['#efe9d9', '#537d9b', '#d68563', '#e4b94f', '#718978', '#a7b9bc', '#49556a'];
+
+function addVehicle(town, route = null) {
+    const { random, vehicles, lanes } = town;
+    const bus = !!route;
+    const routeIndex = route ? Math.floor(random() * route.path.length) : 0;
+    const lane = route ? route.path[routeIndex] : lanes[Math.floor(random() * lanes.length)];
+    const length = bus ? 34 : 21 + random() * 4;
+    const distance = length / 2 + 12 + random() * Math.max(0, lane.length - length - 36);
+    // Never insert a vehicle into an occupied junction or the gap reserved by a
+    // turning vehicle. Generous insertion spacing allows existing traffic to brake.
+    if (lane.from.owner || lane.to.owner || distance > lane.length - length / 2 - 4 ||
+        vehicles.some(v => v.phase === 'lane' && v.lane === lane &&
+            Math.abs(v.distance - distance) < (v.length + length) / 2 + GAP + 18)) return false;
+    const vehicle = { id: town.nextVehicleId++, bus, route, routeIndex, lane, length,
+        width: bus ? 14 : 11, distance, phase: 'lane', speed: 0,
+        maxSpeed: bus ? 29 + random() * 4 : 32 + random() * 13,
+        colour: route ? route.colour : CAR_COLOURS[Math.floor(random() * CAR_COLOURS.length)],
+        next: null, turn: null, reserved: null, dwell: 0,
+        served: !!lane.stop && distance > lane.stop.distance - 2,
+        stopsVisited: 0, distanceTravelled: 0, braking: false };
+    vehicles.push(vehicle);
+    planNext(town, vehicle);
+    return true;
+}
+
+export function setTrafficLevel(town, level) {
+    if (!Number.isFinite(level)) return;
+    town.trafficLevel = Math.max(0, Math.min(2, level));
+    function setGroup(route, target) {
+        const group = town.vehicles.filter(v => v.route === route);
+        const removed = new Set(group.slice(target));
+        for (const vehicle of removed) {
+            if (vehicle.reserved?.owner === vehicle) vehicle.reserved.owner = null;
+        }
+        town.vehicles = town.vehicles.filter(v => !removed.has(v));
+        let needed = Math.max(0, target - group.length);
+        for (let attempt = 0; needed && attempt < target * 25; attempt++) {
+            if (addVehicle(town, route)) needed--;
         }
     }
-    const target = Math.min(100, Math.max(18, Math.round(lanes.length * 0.65)));
-    for (let attempt = 0; vehicles.length < target && attempt < target * 15; attempt++) addVehicle(false);
-    const town = { width, height, seed, random, nodes, edges, lanes, blocks, routes, vehicles, time: 0 };
-    vehicles.forEach(v => planNext(town, v));
-    return town;
+    let buses = 0;
+    for (const route of town.routes) {
+        const target = Math.round(route.baseBuses * town.trafficLevel);
+        buses += target;
+        setGroup(route, target);
+    }
+    setGroup(null, Math.max(0, Math.round(town.baseTraffic * town.trafficLevel) - buses));
 }
 
 function planNext(town, vehicle) {
@@ -206,7 +337,8 @@ function planNext(town, vehicle) {
         vehicle.next = vehicle.route.path[(vehicle.routeIndex + 1) % vehicle.route.path.length];
     } else {
         const choices = vehicle.lane.to.outgoing.filter(l => l.to !== vehicle.lane.from);
-        const straight = choices.find(l => l.dx === vehicle.lane.dx && l.dy === vehicle.lane.dy);
+        const heading = vehicle.lane.end.angle;
+        const straight = choices.find(l => Math.cos(l.start.angle - heading) > 0.86);
         vehicle.next = straight && town.random() < 0.55 ? straight :
             choices[Math.floor(town.random() * choices.length)] || vehicle.lane.to.outgoing[0];
     }
@@ -219,6 +351,26 @@ export function updateTown(town, dt) {
         if (vehicle.phase === 'lane') occupied.get(vehicle.lane).push(vehicle);
     }
     for (const queue of occupied.values()) queue.sort((a, b) => b.distance - a.distance);
+    const candidates = new Map();
+    for (const [lane, queue] of occupied) {
+        const vehicle = queue[0];
+        if (!vehicle || vehicle.reserved || vehicle.distance < lane.length - vehicle.length / 2 - 6) continue;
+        vehicle.waitingSince ??= town.time;
+        if (lane.to.owner || signalState(lane.to, lane.axis, town.time) !== 'green') continue;
+        const room = occupied.get(vehicle.next).every(other =>
+            other.distance - other.length / 2 > vehicle.length / 2 + GAP + 8);
+        if (!room) continue;
+        const candidate = candidates.get(lane.to);
+        if (!candidate || vehicle.waitingSince < candidate.waitingSince ||
+            (vehicle.waitingSince === candidate.waitingSince && vehicle.id < candidate.id)) candidates.set(lane.to, vehicle);
+    }
+    // Oldest eligible arrival wins. Fixed lane ordering would starve one arm of
+    // a busy junction, particularly when diagonal streets share a signal phase.
+    for (const [node, vehicle] of candidates) {
+        node.owner = vehicle;
+        vehicle.reserved = node;
+        vehicle.waitingSince = null;
+    }
     // Update leaders first. Followers can use their new positions without ever
     // jumping through a queue when the frame rate drops.
     const ordered = [...occupied.values()].flat();
@@ -243,15 +395,7 @@ export function updateTown(town, dt) {
         }
         const stopLine = lane.length - vehicle.length / 2 - 4;
         if (vehicle.reserved !== lane.to) {
-            const outgoing = occupied.get(vehicle.next);
-            const room = outgoing.every(other => other.distance - other.length / 2 > vehicle.length / 2 + GAP + 8);
-            const green = signalState(lane.to, lane.axis, town.time) === 'green';
-            if (green && !lane.to.owner && !vehicle.reserved && room && vehicle.distance >= stopLine - 2 && index === 0) {
-                lane.to.owner = vehicle;
-                vehicle.reserved = lane.to;
-            } else {
-                limit = Math.min(limit, stopLine);
-            }
+            limit = Math.min(limit, stopLine);
         }
         if (vehicle.bus && lane.stop && !vehicle.served) {
             limit = Math.min(limit, lane.stop.distance);

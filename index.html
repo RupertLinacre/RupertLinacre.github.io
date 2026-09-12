@@ -21,7 +21,7 @@
 
         body {
             min-height: 100vh;
-            padding: 32px 20px 120px;
+            padding: 32px 20px 190px;
             position: relative;
         }
 
@@ -169,12 +169,13 @@
             left: 50%;
             transform: translateX(-50%);
             z-index: 3;
-            width: max-content;
+            width: 610px;
             max-width: calc(100% - 28px);
             display: flex;
+            flex-direction: column;
             align-items: center;
-            gap: 24px;
-            padding: 10px 12px 10px 20px;
+            gap: 12px;
+            padding: 12px 16px;
             background: #fffdf4f5;
             border: 1px solid #ffffffc9;
             border-radius: 15px;
@@ -182,6 +183,13 @@
         }
 
         .town-controls[hidden] { display: none; }
+        .town-control-header { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 16px; }
+        .town-adjustments { display: grid; grid-template-columns: 90px 1fr 1fr; gap: 22px; width: 100%; border-top: 1px solid #e0e5d6; padding-top: 10px; }
+        .town-adjustment { min-width: 0; }
+        .town-adjustment label { display: flex; justify-content: space-between; gap: 5px; font-size: 10px; font-weight: 600; }
+        .town-adjustment output { color: #788773; font-weight: 400; white-space: nowrap; }
+        .town-adjustment input { width: 100%; height: 30px; accent-color: #355d4c; cursor: pointer; margin: 0; }
+        .town-adjustment select { width: 100%; height: 30px; background: #f6f7ee; border: 1px solid #dce2d3; border-radius: 5px; color: #355d4c; font: inherit; font-size: 11px; margin-top: 3px; padding: 0 7px; }
         .town-caption { font-size: 12px; white-space: nowrap; }
         .town-caption small { display: block; font-size: 10px; color: #85907c; margin-top: 4px; }
         .live-dot { display: inline-block; width: 6px; height: 6px; background: #79a275; border-radius: 50%; margin-right: 5px; }
@@ -217,12 +225,16 @@
         }
 
         @media (max-width: 600px) {
-            body { padding: 16px 14px 145px; }
+            body { padding: 16px 14px 220px; }
             .content { padding: 25px 23px; border-radius: 14px; }
             .link-grid { grid-template-columns: 1fr; gap: 23px; }
             li { font-size: 14px; margin-bottom: 9px; }
             h2 { font-size: 16px; }
             .town-controls { bottom: max(12px, env(safe-area-inset-bottom)); padding: 12px; flex-direction: column; gap: 10px; width: 370px; }
+            .town-control-header { flex-direction: column; gap: 10px; }
+            .town-adjustments { grid-template-columns: 66px 1fr 1fr; gap: 12px; padding-top: 10px; }
+            .town-adjustment label { font-size: 9px; }
+            .town-adjustment input, .town-adjustment select { height: 35px; }
             .town-caption { text-align: center; font-size: 11px; }
             .town-caption small { display: none; }
             .town-actions { width: 100%; }
@@ -312,16 +324,35 @@
     </main>
 
     <div class="town-controls" id="town-controls" role="group" aria-label="Town animation controls" hidden>
+        <div class="town-control-header">
         <div class="town-caption"><span class="live-dot" aria-hidden="true"></span><span id="town-state">A little town, alive</span><small>Made afresh, just for this visit.</small></div>
         <div class="town-actions">
             <button type="button" id="pause-town" aria-label="Pause town animation" aria-pressed="false">Pause</button>
             <button type="button" id="explore-town" aria-pressed="false">Watch the town</button>
             <button type="button" id="new-town">New town <span aria-hidden="true">&#x21bb;</span></button>
         </div>
+        </div>
+        <div class="town-adjustments">
+            <div class="town-adjustment">
+                <label for="simulation-speed">Speed</label>
+                <select id="simulation-speed" aria-label="Simulation speed">
+                    <option value="0.5">0.5×</option><option value="1" selected>1×</option>
+                    <option value="2">2×</option><option value="4">4×</option><option value="8">8×</option>
+                </select>
+            </div>
+            <div class="town-adjustment">
+                <label for="traffic-level">Traffic <output id="traffic-value" for="traffic-level">100%</output></label>
+                <input type="range" id="traffic-level" min="0" max="200" step="10" value="100" aria-label="Traffic level">
+            </div>
+            <div class="town-adjustment">
+                <label for="town-zoom">Zoom <output id="zoom-value" for="town-zoom">100%</output></label>
+                <input type="range" id="town-zoom" min="50" max="150" step="5" value="100" aria-label="Town zoom">
+            </div>
+        </div>
     </div>
     <p class="sr-only" id="town-status" role="status" aria-live="polite"></p>
 
-    <script type="module" src="road-animation.js?v=2"></script>
+    <script type="module" src="road-animation.js?v=3"></script>
 </body>
 
 </html>
