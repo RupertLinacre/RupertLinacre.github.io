@@ -1,4 +1,4 @@
-import { createTown, updateTown, setTrafficLevel, vehiclePoint, lanePoint, signalState, randomSource, offsetPath, ROAD } from './road-world.mjs?v=3';
+import { createTown, updateTown, setTrafficLevel, vehiclePoint, lanePoint, signalState, randomSource, pathPoint, offsetPath, ROAD } from './road-world.mjs?v=4';
 
 const canvas = document.getElementById('road-canvas');
 const ctx = canvas?.getContext('2d');
@@ -192,25 +192,32 @@ if (ctx) {
             g.textAlign = 'center';
             if (clearPlot(x + w / 2, y + h - 13, 32)) g.fillText(['THE GREEN', 'WILLOW PARK', 'TOWN GARDENS', 'OAK MEADOW'][Math.floor(random() * 4)], x + w / 2, y + h - 13);
         } else {
-            const columns = Math.max(2, Math.floor(w / 65));
-            const rows = Math.max(2, Math.floor(h / 66));
-            const cellW = w / columns;
-            const cellH = h / rows;
-            for (let r = 0; r < rows; r++) {
-                for (let c = 0; c < columns; c++) {
-                    const bx = x + c * cellW;
-                    const by = y + r * cellH;
-                    if (random() < 0.15) {
-                        if (clearPlot(bx + cellW / 2, by + cellH / 2, 13)) tree(g, bx + cellW / 2, by + cellH / 2, 10 + random() * 4, random);
-                        continue;
-                    }
-                    const bw = cellW * (0.58 + random() * 0.17);
-                    const bh = cellH * (0.4 + random() * 0.15);
-                    if (!clearPlot(bx + cellW / 2, by + 10 + bh / 2, Math.hypot(bw, bh) / 2 + 6)) continue;
-                    line(g, bx + cellW / 2, by + cellH / 2, bx + cellW / 2, by + cellH - 1, '#e8e2cc', 6);
-                    building(g, bx + (cellW - bw) / 2, by + 10, bw, bh, random, block.kind === 'shops');
-                    if (random() > 0.3 && clearPlot(bx + 9, by + cellH - 13, 8)) tree(g, bx + 9, by + cellH - 13, 5 + random() * 3, random);
-                    line(g, bx + 3, by + cellH - 2, bx + cellW - 3, by + cellH - 2, '#b3c698', 2);
+            const plots = [];
+            // Front gardens and houses follow the actual curb, including around
+            // crescents, rather than filling each neighbourhood with a small grid.
+            for (let distance = 30 + random() * 30; distance < block.boundary.length; distance += 62 + random() * 12) {
+                const curb = pathPoint(block.boundary, distance);
+                const setback = 69 + random() * 7;
+                const px = curb.x - Math.sin(curb.angle) * setback;
+                const py = curb.y + Math.cos(curb.angle) * setback;
+                const bw = 35 + random() * 12;
+                const bh = 27 + random() * 9;
+                const radius = Math.hypot(bw, bh) / 2 + 5;
+                if (!clearPlot(px, py, radius) || plots.some(p => Math.hypot(p.x - px, p.y - py) < p.radius + radius + 6)) continue;
+                plots.push({ x: px, y: py, radius });
+                line(g, curb.x - Math.sin(curb.angle) * 30, curb.y + Math.cos(curb.angle) * 30,
+                    px, py, '#e8e2cc', 5);
+                g.save();
+                g.translate(px, py);
+                g.rotate(curb.angle + Math.PI);
+                building(g, -bw / 2, -bh / 2, bw, bh, random, block.kind === 'shops');
+                g.restore();
+            }
+            for (let i = 0; i < 20; i++) {
+                const tx = x + random() * w;
+                const ty = y + random() * h;
+                if (clearPlot(tx, ty, 10) && plots.every(p => Math.hypot(p.x - tx, p.y - ty) > p.radius + 13)) {
+                    tree(g, tx, ty, 6 + random() * 5, random);
                 }
             }
         }
@@ -223,7 +230,7 @@ if (ctx) {
         g.fillStyle = '#cbdab8';
         g.fillRect(0, 0, scenery.width, scenery.height);
         worldTransform(g);
-        town.blocks.forEach(block => { if (visible(block.center, 400)) drawBlock(g, block); });
+        town.blocks.forEach(block => { if (visible(block.center, Math.hypot(block.width, block.height) / 2 + 50)) drawBlock(g, block); });
         g.lineCap = 'round';
         g.lineJoin = 'round';
         // Stroke the whole network once per layer so junctions join cleanly.

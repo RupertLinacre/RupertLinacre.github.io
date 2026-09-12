@@ -57,13 +57,28 @@ test('signals have amber and all-red clearance and never release both axes toget
     assert.ok(amber && allRed);
 });
 
-test('streets include curved lane geometry, diagonal connections, and irregular blocks', () => {
+test('streets use genuine circular arcs and continue smoothly through junctions', () => {
     const town = createTown(2200, 1700, 42);
-    assert.ok(town.edges.some(edge => edge.diagonal));
-    assert.ok(town.edges.some(edge => edge.path.length > Math.hypot(edge.b.x - edge.a.x, edge.b.y - edge.a.y) + 1));
-    assert.ok(town.edges.filter(edge => !edge.diagonal).some(edge =>
-        Math.abs(edge.a.x - edge.b.x) > 40 && Math.abs(edge.a.y - edge.b.y) > 40));
-    assert.ok(town.nodes.some(node => node.outgoing.length === 5));
+    const arcs = town.edges.filter(edge => edge.path.kind === 'arc');
+    assert.ok(arcs.length > town.edges.length * 0.65);
+    assert.ok(arcs.some(edge => Math.abs(edge.path.points.at(-1).angle - edge.path.points[0].angle) > Math.PI / 4),
+        'the layout must have sweeping bends, not tiny deviations from straight roads');
+    for (const { path } of arcs) {
+        const sign = Math.sign(path.points.at(-1).angle - path.points[0].angle);
+        path.points.forEach((point, i) => {
+            assert.ok(Math.abs(Math.hypot(point.x - path.center.x, point.y - path.center.y) - path.radius) < 0.1,
+                'each street arc must retain its circular radius after subdivision');
+            if (i) assert.ok((point.angle - path.points[i - 1].angle) * sign >= -1e-8,
+                'curvature must not reverse partway along an arc');
+        });
+    }
+    for (const node of town.nodes) {
+        assert.ok(node.outgoing.some(a => node.outgoing.some(b =>
+            a !== b && Math.cos(a.heading - b.heading) < -0.99999)),
+            'a main street must keep its tangent when a side street joins');
+    }
+    assert.equal(town.nodes.length - town.edges.length + town.blocks.length, 1,
+        'every neighbourhood must be a face in the connected street network');
     assert.ok(town.blocks.every(block => block.polygon.length > 3));
     for (const lane of town.lanes) {
         assert.ok(lane.length > 50, 'junctions must leave usable lane space');
@@ -135,6 +150,39 @@ test('buses dwell at a stop before continuing their numbered route', () => {
     advance(town, 3);
     assert.equal(bus.stopsVisited, 1);
     assert.ok(bus.distance > bus.lane.stop.distance);
+});
+
+test('a bus waits until its whole length can clear the junction behind a stationary queue', () => {
+    const town = createTown(1440, 1000, 1);
+    const bus = town.vehicles.find(v => v.bus && v.next.length > 100);
+    const leader = town.vehicles.find(v => !v.bus);
+    town.vehicles = [bus, leader];
+    const node = bus.lane.to;
+    node.signal = false;
+    bus.served = true;
+    bus.distance = bus.lane.length - bus.length / 2 - 4;
+    leader.lane = bus.next;
+    leader.next = leader.lane.to.outgoing[0];
+    leader.distance = bus.length + GAP + 2 + leader.length / 2;
+    leader.maxSpeed = 0;
+    const stoppedAt = bus.distance;
+    advance(town, 2);
+    assert.equal(node.owner, null, 'front-bumper space alone must not reserve the junction');
+    assert.equal(bus.distance, stoppedAt);
+    leader.distance += 25;
+    advance(town, 1);
+    assert.ok(bus.distance > stoppedAt || bus.phase === 'turn');
+});
+
+test('short curved streets do not lock neighbouring junctions in a longer run', () => {
+    const town = createTown(1440, 1000, 1);
+    advance(town, 300);
+    const distance = town.vehicles.map(v => v.distanceTravelled);
+    const buses = town.vehicles.filter(v => v.bus);
+    const stops = buses.map(v => v.stopsVisited);
+    advance(town, 300);
+    assert.ok(town.vehicles.every((v, i) => v.distanceTravelled > distance[i] + 200));
+    assert.ok(buses.every((v, i) => v.stopsVisited > stops[i]));
 });
 
 test('five-minute traffic runs keep queues separated, turns continuous, and buses serving stops', () => {

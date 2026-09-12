@@ -1,3 +1,7 @@
+import { measure, pathPoint, offsetPath } from './street-geometry.mjs';
+import { createStreetLayout } from './street-layout.mjs';
+export { pathPoint, offsetPath } from './street-geometry.mjs';
+
 // The town and its traffic share a directed road graph. Distances are in world
 // pixels; the renderer can scale it independently of the simulation clock.
 export const ROAD = 44;
@@ -21,14 +25,20 @@ export function randomSource(seed) {
 }
 
 function shortestPath(from, to) {
-    const queue = [from];
+    const pending = new Set([from]);
+    const distance = new Map([[from, 0]]);
     const previous = new Map([[from, null]]);
-    for (const node of queue) {
+    while (pending.size) {
+        let node;
+        for (const candidate of pending) if (!node || distance.get(candidate) < distance.get(node)) node = candidate;
+        pending.delete(node);
         if (node === to) break;
         for (const lane of node.outgoing) {
-            if (!previous.has(lane.to)) {
+            const cost = distance.get(node) + lane.edge.path.length;
+            if (!distance.has(lane.to) || cost < distance.get(lane.to)) {
+                distance.set(lane.to, cost);
                 previous.set(lane.to, lane);
-                queue.push(lane.to);
+                pending.add(lane.to);
             }
         }
     }
@@ -56,55 +66,7 @@ export function lanePoint(lane, distance) {
     return pathPoint(lane.path, distance);
 }
 
-function measure(points) {
-    let length = 0;
-    points.forEach((point, i) => {
-        if (i) length += Math.hypot(point.x - points[i - 1].x, point.y - points[i - 1].y);
-        point.distance = length;
-    });
-    return { points, length };
-}
 
-export function pathPoint(path, distance) {
-    const points = path.points;
-    distance = Math.max(0, Math.min(path.length, distance));
-    let low = 1;
-    let high = points.length - 1;
-    while (low < high) {
-        const mid = (low + high) >>> 1;
-        if (points[mid].distance < distance) low = mid + 1;
-        else high = mid;
-    }
-    const a = points[low - 1];
-    const b = points[low];
-    const t = (distance - a.distance) / (b.distance - a.distance || 1);
-    const angle = a.angle === undefined ? Math.atan2(b.y - a.y, b.x - a.x) :
-        a.angle + Math.atan2(Math.sin(b.angle - a.angle), Math.cos(b.angle - a.angle)) * t;
-    return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, angle };
-}
-
-export function offsetPath(path, offset, start = 0, end = path.length) {
-    const count = Math.max(2, Math.ceil((end - start) / 4));
-    return measure(Array.from({ length: count + 1 }, (_, i) => {
-        const p = pathPoint(path, start + (end - start) * i / count);
-        return { x: p.x + Math.sin(p.angle) * offset, y: p.y - Math.cos(p.angle) * offset, angle: p.angle };
-    }));
-}
-
-function curveBetween(a, b, bend) {
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const length = Math.hypot(dx, dy);
-    return measure(Array.from({ length: 81 }, (_, i) => {
-        const t = i / 80;
-        // A smooth bow with straight approaches keeps the junction mouths clear.
-        const u = Math.max(0, Math.min(1, (t - 0.25) / 0.5));
-        const bulge = Math.sin(Math.PI * u) ** 2 * bend;
-        const derivative = t > 0.25 && t < 0.75 ? Math.PI * Math.sin(2 * Math.PI * u) * bend / 0.5 : 0;
-        return { x: a.x + dx * t - dy / length * bulge, y: a.y + dy * t + dx / length * bulge,
-            angle: Math.atan2(dy + dx / length * derivative, dx - dy / length * derivative) };
-    }));
-}
 
 function makeTurn(incoming, outgoing) {
     const p0 = incoming.end;
@@ -135,135 +97,74 @@ export function vehiclePoint(vehicle) {
 export function createTown(width, height, seed) {
     const random = randomSource(seed);
     const choose = items => items[Math.floor(random() * items.length)];
-    function coordinates(size) {
-        const values = [-210 - random() * 60];
-        while (values.at(-1) < size + 240) values.push(values.at(-1) + 245 + random() * 85);
-        return values;
-    }
-    const xs = coordinates(width);
-    const ys = coordinates(height);
-    const nodes = [];
-    const edges = [];
+    const layout = createStreetLayout(width, height, random);
+    const nodes = layout.nodes;
+    const edges = layout.roads;
     const lanes = [];
-    const blocks = [];
-    const wave = random() * Math.PI * 2;
-    const grid = ys.map((y, row) => xs.map((x, col) => {
-        const node = { id: nodes.length,
-            x: x + Math.sin(y / 430 + wave) * 90 + (random() - 0.5) * 42,
-            y: y + Math.sin(x / 480 + wave) * 90 + (random() - 0.5) * 42,
-            row, col, outgoing: [], owner: null, radius: JUNCTION,
-            signal: false, offset: random() * 22, cycle: 19 + random() * 6 };
-        nodes.push(node);
-        return node;
-    }));
-    let nextEdgeId = 0;
-    let nextLaneId = 0;
-    const boundaries = new Map();
-    const edgeKey = (a, b) => [a.id, b.id].sort((x, y) => x - y).join(':');
-    function connect(a, b, diagonal = false) {
-        const distance = Math.hypot(b.x - a.x, b.y - a.y);
-        const edge = { id: nextEdgeId++, a, b, diagonal,
-            axis: Math.abs(b.x - a.x) > Math.abs(b.y - a.y) ? 'x' : 'y', lanes: [],
-            path: curveBetween(a, b, diagonal ? 0 : (random() - 0.5) * 34) };
-        edges.push(edge);
-        boundaries.set(edgeKey(a, b), edge);
-        for (const [from, to] of [[a, b], [b, a]]) {
-            const dx = (to.x - from.x) / distance;
-            const dy = (to.y - from.y) / distance;
-            const lane = { id: nextLaneId++, edge, from, to, dx, dy, axis: edge.axis, stop: null };
+    for (const node of nodes) Object.assign(node, { outgoing: [], owner: null,
+        radius: JUNCTION, signal: false, offset: random() * 22, cycle: 19 + random() * 6 });
+    for (const edge of edges) {
+        edge.lanes = [];
+        for (const [from, to, reverse] of [[edge.a, edge.b, false], [edge.b, edge.a, true]]) {
+            const heading = reverse ? edge.path.points.at(-1).angle + Math.PI : edge.path.points[0].angle;
+            const arrival = reverse ? edge.path.points[0].angle + Math.PI : edge.path.points.at(-1).angle;
+            const lane = { id: lanes.length, edge, from, to, reverse,
+                dx: Math.cos(heading), dy: Math.sin(heading), heading,
+                axis: Math.abs(Math.cos(arrival)) > Math.abs(Math.sin(arrival)) ? 'x' : 'y', stop: null };
             lanes.push(lane);
             edge.lanes.push(lane);
             from.outgoing.push(lane);
         }
     }
-    grid.forEach((row, r) => row.forEach((node, c) => {
-        if (c < xs.length - 1) connect(node, row[c + 1]);
-        if (r < ys.length - 1) connect(node, grid[r + 1][c]);
-    }));
-    // Remove a few streets to create T-junctions and larger neighbourhoods.
-    // Check connectivity before accepting a removal, so every route stays usable.
-    for (const edge of [...edges]) {
-        if (random() > 0.16 || edge.a.outgoing.length < 3 || edge.b.outgoing.length < 3) continue;
-        for (const lane of edge.lanes) lane.from.outgoing = lane.from.outgoing.filter(l => l !== lane);
-        if (!shortestPath(edge.a, edge.b).length) {
-            for (const lane of edge.lanes) lane.from.outgoing.push(lane);
-        } else {
-            edges.splice(edges.indexOf(edge), 1);
-            for (const lane of edge.lanes) lanes.splice(lanes.indexOf(lane), 1);
-        }
-    }
-    function minimumAngle(node, extra) {
-        const directions = node.outgoing.map(l => Math.atan2(l.dy, l.dx));
-        if (extra) directions.push(Math.atan2(extra.y - node.y, extra.x - node.x));
-        directions.sort((a, b) => a - b);
-        return Math.min(...directions.map((angle, i) =>
-            (directions[(i + 1) % directions.length] - angle + Math.PI * 2) % (Math.PI * 2)));
-    }
-    const diagonals = new Map();
-    for (let r = 0; r < ys.length - 1; r++) {
-        for (let c = 0; c < xs.length - 1; c++) {
-            if (random() > 0.3) continue;
-            const reverse = random() > 0.5;
-            const a = grid[r][c + (reverse ? 1 : 0)];
-            const b = grid[r + 1][c + (reverse ? 0 : 1)];
-            if (a.outgoing.length >= 5 || b.outgoing.length >= 5 ||
-                minimumAngle(a, b) < 0.72 || minimumAngle(b, a) < 0.72) continue;
-            connect(a, b, true);
-            diagonals.set(`${r}:${c}`, reverse);
-        }
-    }
     for (const node of nodes) {
         node.signal = node.outgoing.length >= 3;
-        // Acute and five-way junctions need more clearance than square corners.
-        node.radius = Math.max(JUNCTION, 31 / Math.tan(minimumAngle(node) / 2));
+        const angles = node.outgoing.map(lane => lane.heading).sort((a, b) => a - b);
+        const smallest = Math.min(...angles.map((angle, i) =>
+            (angles[(i + 1) % angles.length] - angle + Math.PI * 4) % (Math.PI * 2)));
+        node.radius = Math.max(JUNCTION, 31 / Math.tan(smallest / 2));
     }
     for (const lane of lanes) {
-        const reverse = lane.from !== lane.edge.a;
-        const center = reverse ? measure([...lane.edge.path.points].reverse().map(p =>
+        const center = lane.reverse ? measure([...lane.edge.path.points].reverse().map(p =>
             ({ x: p.x, y: p.y, angle: p.angle + Math.PI }))) : lane.edge.path;
         lane.path = offsetPath(center, LANE, lane.from.radius, center.length - lane.to.radius);
         lane.length = lane.path.length;
         lane.start = pathPoint(lane.path, 0);
         lane.end = pathPoint(lane.path, lane.length);
     }
-    function addBlock(corners) {
-        const polygon = corners.flatMap((a, i) => {
-            const b = corners[(i + 1) % corners.length];
-            const edge = boundaries.get(edgeKey(a, b));
-            const points = edge.a === a ? edge.path.points : [...edge.path.points].reverse();
-            return points.slice(0, -1).map(p => ({ x: p.x, y: p.y }));
+    const blocks = layout.faces.map(face => {
+        const polygon = face.path.points.slice(0, -1);
+        // Area-weighted centroids keep the plots centred in irregular crescents.
+        let cx = 0;
+        let cy = 0;
+        polygon.forEach((a, i) => {
+            const b = polygon[(i + 1) % polygon.length];
+            const cross = a.x * b.y - b.x * a.y;
+            cx += (a.x + b.x) * cross;
+            cy += (a.y + b.y) * cross;
         });
-        const center = { x: corners.reduce((sum, p) => sum + p.x, 0) / corners.length,
-            y: corners.reduce((sum, p) => sum + p.y, 0) / corners.length };
-        let angle = Math.atan2(corners[1].y - corners[0].y, corners[1].x - corners[0].x);
-        while (angle > Math.PI / 4) angle -= Math.PI / 2;
-        while (angle < -Math.PI / 4) angle += Math.PI / 2;
-        const local = polygon.map(p => ({ x: (p.x - center.x) * Math.cos(angle) + (p.y - center.y) * Math.sin(angle),
-            y: -(p.x - center.x) * Math.sin(angle) + (p.y - center.y) * Math.cos(angle) }));
+        const center = { x: cx / (6 * face.area), y: cy / (6 * face.area) };
+        const local = polygon.map(p => ({ x: p.x - center.x, y: p.y - center.y, angle: p.angle }));
         const x = Math.min(...local.map(p => p.x));
         const y = Math.min(...local.map(p => p.y));
-        blocks.push({ x, y, width: Math.max(...local.map(p => p.x)) - x,
-            height: Math.max(...local.map(p => p.y)) - y, center, angle, polygon: local,
-            kind: corners.length === 3 ? 'park' : choose(['homes', 'homes', 'shops', 'park']), seed: random() * 4294967296 });
-    }
-    for (let r = 0; r < ys.length - 1; r++) {
-        for (let c = 0; c < xs.length - 1; c++) {
-            const [a, b, d, e] = [grid[r][c], grid[r][c + 1], grid[r + 1][c + 1], grid[r + 1][c]];
-            const diagonal = diagonals.get(`${r}:${c}`);
-            if (diagonal === false) { addBlock([a, b, d]); addBlock([a, d, e]); }
-            else if (diagonal === true) { addBlock([a, b, e]); addBlock([b, d, e]); }
-            else addBlock([a, b, d, e]);
-        }
-    }
-    // Each numbered bus line is a repeatable circuit through four neighbourhoods.
+        return { x, y, width: Math.max(...local.map(p => p.x)) - x,
+            height: Math.max(...local.map(p => p.y)) - y, center, angle: 0, polygon: local,
+            boundary: measure([...local.map(p => ({ ...p })), { ...local[0] }]),
+            kind: choose(['homes', 'homes', 'shops', 'park']), seed: random() * 4294967296 };
+    });
+    // Each line visits a different set of neighbourhoods on a closed circuit.
     const routes = ROUTES.map((style, i) => {
-        const left = i === 1 && xs.length > 4 ? 1 : 0;
-        const right = xs.length - 1 - (i === 2 && xs.length > 4 ? 1 : 0);
-        const top = i === 2 && ys.length > 4 ? 1 : 0;
-        const bottom = ys.length - 1;
-        let waypoints = [grid[top][left], grid[top][right], grid[bottom][right], grid[bottom][left]];
-        // A central waypoint brings the lines through the visible town as well.
-        waypoints.splice(2, 0, grid[Math.floor(ys.length / 2)][Math.floor(xs.length / 2)]);
+        const selected = new Set();
+        const radius = i === 1 ? 0.24 : 0.4;
+        const count = Math.min(5, nodes.length);
+        const waypoints = Array.from({ length: count }, (_, j) => {
+            const angle = j * Math.PI * 2 / count + i * 0.8;
+            const target = { x: width / 2 + Math.cos(angle) * width * radius,
+                y: height / 2 + Math.sin(angle) * height * radius };
+            const node = nodes.filter(n => !selected.has(n)).sort((a, b) =>
+                Math.hypot(a.x - target.x, a.y - target.y) - Math.hypot(b.x - target.x, b.y - target.y))[0];
+            selected.add(node);
+            return node;
+        });
         if (i % 2) waypoints.reverse();
         const path = waypoints.flatMap((node, index) => shortestPath(node, waypoints[(index + 1) % waypoints.length]));
         path.forEach((lane, index) => {
@@ -356,9 +257,21 @@ export function updateTown(town, dt) {
         const vehicle = queue[0];
         if (!vehicle || vehicle.reserved || vehicle.distance < lane.length - vehicle.length / 2 - 6) continue;
         vehicle.waitingSince ??= town.time;
+        // The entire vehicle must be able to clear the junction, even if the
+        // outgoing queue does not move. Checking only its front can lock two
+        // neighbouring junctions with vehicles whose tails still occupy them.
+        const hasRoom = next => occupied.get(next).every(other =>
+            other.distance - other.length / 2 > vehicle.length + GAP + 6);
+        // Drivers can abandon a persistently blocked turn. Without a detour,
+        // queues around a short residential loop can lock one another forever.
+        if (!vehicle.bus && town.time - vehicle.waitingSince > 7 && !hasRoom(vehicle.next)) {
+            const alternatives = lane.to.outgoing.filter(next => next !== vehicle.next && hasRoom(next));
+            alternatives.sort((a, b) => (a.to === lane.from) - (b.to === lane.from) ||
+                occupied.get(a).length - occupied.get(b).length);
+            if (alternatives.length) vehicle.next = alternatives[0];
+        }
         if (lane.to.owner || signalState(lane.to, lane.axis, town.time) !== 'green') continue;
-        const room = occupied.get(vehicle.next).every(other =>
-            other.distance - other.length / 2 > vehicle.length / 2 + GAP + 8);
+        const room = hasRoom(vehicle.next);
         if (!room) continue;
         const candidate = candidates.get(lane.to);
         if (!candidate || vehicle.waitingSince < candidate.waitingSince ||
