@@ -21,7 +21,7 @@
 
         body {
             min-height: 100vh;
-            padding: 32px 20px 190px;
+            padding: 32px 20px 240px;
             position: relative;
         }
 
@@ -157,6 +157,21 @@
 
         .town-label .eyebrow { margin-bottom: 7px; }
         .town-label p:last-child { font-size: 11px; color: #738272; }
+        .planner-panel { max-width: 280px; border-top: 1px solid #dce2d3; margin-top: 12px; padding-top: 12px; pointer-events: auto; }
+        .planner-panel[hidden] { display: none; }
+        .planner-panel label { display: block; font-size: 10px; margin: 8px 0 4px; }
+        .planner-panel select { width: 100%; font: inherit; font-size: 11px; padding: 6px; color: #355d4c; background: #fffdf4; border: 1px solid #dce2d3; border-radius: 5px; }
+        .planner-panel p { font-size: 11px; line-height: 1.5; margin-top: 8px; }
+        .trip-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .trip-fields label { min-width: 0; }
+        .trip-fields select { margin-top: 4px; }
+        .road-key { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 14px; margin-top: 12px; font-size: 10px; }
+        .road-key span::before { content: ''; display: inline-block; width: 15px; height: 3px; margin: 0 5px 3px 0; background: var(--road); }
+        .planning-trip #road-canvas { pointer-events: auto; cursor: crosshair; }
+        .town-control-footer { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; border-top: 1px solid #e0e5d6; padding-top: 8px; }
+        .town-control-footer p { font-size: 10px; color: #788773; }
+        .town-control-footer strong { color: #476151; font-weight: 600; }
+        #plan-trip { min-height: 34px; flex: none; }
         .route-key { display: flex; gap: 7px; margin: 12px 0 9px; }
         .route-key span { color: #fff9eb; font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 4px; }
         .route-12 { background: #cf5249; }
@@ -225,7 +240,7 @@
         }
 
         @media (max-width: 600px) {
-            body { padding: 16px 14px 220px; }
+            body { padding: 16px 14px 280px; }
             .content { padding: 25px 23px; border-radius: 14px; }
             .link-grid { grid-template-columns: 1fr; gap: 23px; }
             li { font-size: 14px; margin-bottom: 9px; }
@@ -240,6 +255,10 @@
             .town-actions { width: 100%; }
             button { flex: 1; padding: 0 9px; font-size: 11px; min-height: 44px; }
             .town-label { top: 16px; left: 16px; }
+            .planning-trip .town-label { right: 16px; padding: 12px; }
+            .planning-trip .town-label > p, .planning-trip .town-label > .route-key { display: none; }
+            .planning-trip .planner-panel { border: 0; padding-top: 0; margin-top: 0; max-width: none; }
+            .planning-trip #planner-help { font-size: 10px; }
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -255,6 +274,19 @@
         <p>Every visit, a new neighbourhood.</p>
         <div class="route-key" aria-label="Bus routes 12, 24 and 36"><span class="route-12">12</span><span class="route-24">24</span><span class="route-36">36</span></div>
         <p><span id="bus-count">Buses</span> &middot; <span id="car-count">cars</span> &middot; a little everyday life</p>
+        <div class="planner-panel" id="planner-panel" hidden>
+            <strong>Plan a trip</strong>
+            <p id="planner-help">Choose two places on the map, or use the places below. Zoom out to see more.</p>
+            <div class="trip-fields">
+                <label for="trip-from">From<select id="trip-from"><option value="">Choose a starting point</option></select></label>
+                <label for="trip-to">To<select id="trip-to"><option value="">Choose a destination</option></select></label>
+            </div>
+            <p id="trip-result" role="status">Routes adapt to the traffic.</p>
+            <div class="road-key" aria-label="Street types">
+                <span style="--road:#d0a34e">Arterial</span><span style="--road:#8eb4ad">Local main road</span>
+                <span style="--road:#d7decb">Residential</span><span style="--road:#c58e72">Single track</span>
+            </div>
+        </div>
     </aside>
     <main class="content" id="page-content">
         <p class="eyebrow">Buses, games &amp; little discoveries</p>
@@ -342,17 +374,21 @@
             </div>
             <div class="town-adjustment">
                 <label for="traffic-level">Traffic <output id="traffic-value" for="traffic-level">100%</output></label>
-                <input type="range" id="traffic-level" min="0" max="200" step="10" value="100" aria-label="Traffic level">
+                <input type="range" id="traffic-level" min="0" max="600" step="10" value="100" aria-label="Traffic level">
             </div>
             <div class="town-adjustment">
                 <label for="town-zoom">Zoom <output id="zoom-value" for="town-zoom">100%</output></label>
                 <input type="range" id="town-zoom" min="50" max="150" step="5" value="100" aria-label="Town zoom">
             </div>
         </div>
+        <div class="town-control-footer">
+            <p><strong id="traffic-state">Flowing</strong> &middot; <span id="queue-count">0 waiting</span><br>Turn traffic up for rush hour.</p>
+            <button type="button" id="plan-trip" aria-expanded="false" aria-controls="planner-panel">Plan a trip</button>
+        </div>
     </div>
     <p class="sr-only" id="town-status" role="status" aria-live="polite"></p>
 
-    <script type="module" src="road-animation.js?v=4"></script>
+    <script type="module" src="road-animation.js?v=5"></script>
 </body>
 
 </html>

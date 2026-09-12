@@ -1,4 +1,5 @@
-import { createTown, updateTown, setTrafficLevel, vehiclePoint, lanePoint, signalState, randomSource, pathPoint, offsetPath, ROAD } from './road-world.mjs?v=4';
+import { createTown, updateTown, setTrafficLevel, updateTrafficMetrics, vehiclePoint, lanePoint, signalState, randomSource, pathPoint, offsetPath, findRoute, makeTurn, isRoundabout } from './road-world.mjs?v=5';
+import { ROAD_TYPES } from './traffic-planner.mjs';
 
 const canvas = document.getElementById('road-canvas');
 const ctx = canvas?.getContext('2d');
@@ -14,6 +15,14 @@ if (ctx) {
     const speedControl = document.getElementById('simulation-speed');
     const trafficControl = document.getElementById('traffic-level');
     const zoomControl = document.getElementById('town-zoom');
+    const plannerButton = document.getElementById('plan-trip');
+    const tripFrom = document.getElementById('trip-from');
+    const tripTo = document.getElementById('trip-to');
+    let planning = false;
+    let origin = null;
+    let destination = null;
+    let trip = null;
+    let lastMetrics = -1;
     const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
     let paused = motionPreference.matches;
     let exploring = false;
@@ -230,44 +239,103 @@ if (ctx) {
         g.fillStyle = '#cbdab8';
         g.fillRect(0, 0, scenery.width, scenery.height);
         worldTransform(g);
+        g.lineCap = 'butt';
+        g.lineJoin = 'round';
+        g.setLineDash([]);
         town.blocks.forEach(block => { if (visible(block.center, Math.hypot(block.width, block.height) / 2 + 50)) drawBlock(g, block); });
         g.lineCap = 'round';
         g.lineJoin = 'round';
-        // Stroke the whole network once per layer so junctions join cleanly.
-        for (const [width, colour] of [[ROAD + 15, '#a8b89c'], [ROAD + 12, '#e9e3d4'], [ROAD, '#637477']]) {
-            g.beginPath();
-            for (const edge of town.edges) {
-                trace(g, edge.path.points);
+        // Wider, darker corridors carry through traffic. Narrow lanes taper
+        // into one shared carriageway, matching the paths driven by the cars.
+        const roadsByWidth = [...town.edges].sort((a, b) => a.width - b.width);
+        for (const extra of [15, 12, 0]) {
+            for (const edge of roadsByWidth) {
+                const colour = extra === 15 ? '#a8b89c' : extra === 12 ? '#e9e3d4' : edge.colour;
+                if (!edge.singleTrack) strokePath(g, edge.path, colour, edge.width + extra);
+                else for (let d = 0; d < edge.path.length; d += 4) {
+                    const outside = d < edge.narrowStart ? Math.min(1, (edge.narrowStart - d) / 24) :
+                        d > edge.narrowEnd ? Math.min(1, (d - edge.narrowEnd) / 24) : 0;
+                    const width = 20 + (edge.width - 20) * (1 - Math.cos(Math.PI * outside)) / 2;
+                    const a = pathPoint(edge.path, d), b = pathPoint(edge.path, d + 4);
+                    line(g, a.x, a.y, b.x, b.y, colour, width + extra);
+                }
             }
-            g.strokeStyle = colour;
-            g.lineWidth = width;
-            g.stroke();
+            for (const node of town.nodes) if (isRoundabout(node)) {
+                circle(g, node.x, node.y, node.orbitRadius + 15 + extra / 2,
+                    extra === 15 ? '#a8b89c' : extra === 12 ? '#e9e3d4' : '#637477');
+            }
         }
         g.lineCap = 'butt';
         for (const edge of town.edges) {
             const start = edge.a.radius + 8;
             const end = edge.path.length - edge.b.radius - 8;
-            g.setLineDash([9, 11]);
-            strokePath(g, offsetPath(edge.path, 0, start, end), '#dde0cd', 1.5);
-            g.setLineDash([]);
-            // Fine kerb lines sit just inside the asphalt.
-            for (const side of [-1, 1]) {
-                strokePath(g, offsetPath(edge.path, 20 * side, start, end), '#b7bdaa', 0.65);
+            const sections = edge.singleTrack ? [[start, edge.narrowStart - 34], [edge.narrowEnd + 34, end]] : [[start, end]];
+            for (const [a, b] of sections) {
+                if (b <= a) continue;
+                if (edge.roadType !== 'residential') {
+                    g.setLineDash([9, 11]);
+                    strokePath(g, offsetPath(edge.path, 0, a, b), '#dde0cd', 1.5);
+                    g.setLineDash([]);
+                }
+                for (const side of [-1, 1]) strokePath(g, offsetPath(edge.path, (edge.width / 2 - 2) * side, a, b), '#c6ccba', 0.65);
+            }
+            if (edge.singleTrack) {
+                for (const side of [-1, 1]) {
+                    strokePath(g, offsetPath(edge.path, side * 13, edge.narrowStart + 8, edge.narrowEnd - 8), '#747f73', 2.5);
+                    strokePath(g, offsetPath(edge.path, side * 13, edge.narrowStart + 8, edge.narrowEnd - 8), '#e5debd', 1);
+                }
+                for (const lane of edge.lanes) {
+                    const p = lanePoint(lane, lane.singleEntry - 15);
+                    g.save(); g.translate(p.x, p.y); g.rotate(p.angle);
+                    // Roadside narrowing sign; drivers take turns through here.
+                    line(g, 0, -11, 0, -26, '#667567', 2);
+                    g.beginPath(); g.moveTo(-7, -20); g.lineTo(7, -20); g.lineTo(0, -32); g.closePath();
+                    g.fillStyle = '#fbf2d6'; g.fill(); g.strokeStyle = '#b9614d'; g.lineWidth = 2; g.stroke();
+                    line(g, -2, -23, 0, -28, '#5a685e', 1.3);
+                    line(g, 2, -23, 0, -28, '#5a685e', 1.3);
+                    g.restore();
+                }
             }
         }
         for (const node of town.nodes) {
+            if (isRoundabout(node)) {
+                const full = node.control === 'roundabout';
+                circle(g, node.x, node.y, full ? 27 : 8, '#e9e3d4');
+                circle(g, node.x, node.y, full ? 24 : 6, full ? '#9ebc83' : '#f4edda');
+                if (full) {
+                    circle(g, node.x + 2, node.y + 3, 13, '#709366');
+                    circle(g, node.x - 3, node.y - 3, 10, '#8ead73');
+                }
+                for (let i = 0; i < 3; i++) {
+                    const angle = i * Math.PI * 2 / 3;
+                    g.save(); g.translate(node.x + Math.cos(angle) * node.orbitRadius, node.y + Math.sin(angle) * node.orbitRadius);
+                    g.rotate(angle + Math.PI / 2);
+                    line(g, -5, 0, 5, 0, '#e9e6cf', 1.6);
+                    line(g, 2, -3, 5, 0, '#e9e6cf', 1.6);
+                    line(g, 2, 3, 5, 0, '#e9e6cf', 1.6);
+                    g.restore();
+                }
+            }
             if (node.outgoing.length < 3) continue;
             for (const outgoing of node.outgoing) {
                 const incoming = outgoing.edge.lanes.find(l => l.to === node);
+                if (!node.signal && !isRoundabout(node) && incoming.hasPriority) continue;
                 g.save();
                 g.translate(incoming.end.x, incoming.end.y);
                 g.rotate(incoming.end.angle);
-                // Crossings are inside the stop lines, clear of queued traffic.
-                for (let stripe = -17; stripe <= 17; stripe += 6) {
-                    g.fillStyle = '#e6e6d5';
-                    g.fillRect(6, stripe + 11, 7, 3);
+                if (node.signal) {
+                    for (let stripe = -17; stripe <= 17; stripe += 6) {
+                        g.fillStyle = '#e6e6d5';
+                        g.fillRect(6, stripe + incoming.edge.offset, 7, 3);
+                    }
+                    line(g, -3, -8, -3, 8, '#f1edda', 2);
+                } else {
+                    g.setLineDash([3, 3]);
+                    for (const x of [-3, -7]) line(g, x, -7, x, 7, '#f1edda', 1.6);
+                    g.setLineDash([]);
+                    g.beginPath(); g.moveTo(-15, 0); g.lineTo(-25, -5); g.lineTo(-25, 5); g.closePath();
+                    g.strokeStyle = '#edead5'; g.lineWidth = 1.2; g.stroke();
                 }
-                line(g, -3, -8, -3, 8, '#f1edda', 2);
                 g.restore();
             }
         }
@@ -374,12 +442,77 @@ if (ctx) {
     }
 
     function render() {
+        if (lastMetrics !== town.metricsAt) {
+            lastMetrics = town.metricsAt;
+            document.getElementById('traffic-state').textContent = town.metrics.status;
+            document.getElementById('queue-count').textContent = `${town.metrics.queued} waiting`;
+            if (planning && origin && destination) calculateTrip();
+        }
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(scenery, 0, 0);
         worldTransform(ctx);
+        if (planning) drawPlanner();
         town.vehicles.forEach(drawVehicle);
         for (const lane of town.lanes) if (lane.to.signal) drawSignal(lane);
+    }
+
+    function drawPlanner() {
+        ctx.save();
+        ctx.lineCap = 'round';
+        for (const edge of town.edges) {
+            strokePath(ctx, offsetPath(edge.path, 0, edge.a.radius, edge.path.length - edge.b.radius),
+                ROAD_TYPES[edge.roadType].mapColour, edge.roadType === 'arterial' ? 4 : 2);
+        }
+        if (trip) {
+            const paths = trip.path.flatMap((lane, i) => i ? [makeTurn(trip.path[i - 1], lane), lane.path] : [lane.path]);
+            for (const path of paths) strokePath(ctx, path, '#fff8e9', 8);
+            for (const path of paths) strokePath(ctx, path, '#288ec1', 4);
+        }
+        for (const [node, label] of [[origin, 'A'], [destination, 'B']]) {
+            if (!node) continue;
+            const radius = 12 / scale;
+            circle(ctx, node.x, node.y, radius + 2 / scale, '#fff8e9');
+            circle(ctx, node.x, node.y, radius, '#2879a1');
+            ctx.font = `bold ${12 / scale}px system-ui, sans-serif`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff8e9';
+            ctx.fillText(label, node.x, node.y);
+        }
+        ctx.restore();
+    }
+
+    function resetTrip() {
+        origin = destination = trip = null;
+        const names = ['Town centre', 'East neighbourhood', 'South-east neighbourhood', 'South neighbourhood',
+            'South-west neighbourhood', 'West neighbourhood', 'North-west neighbourhood', 'North neighbourhood', 'North-east neighbourhood'];
+        for (const [select, placeholder] of [[tripFrom, 'Choose a starting point'], [tripTo, 'Choose a destination']]) {
+            select.replaceChildren(new Option(placeholder, ''));
+            town.network.hubs.forEach((node, i) => select.add(new Option(names[i] || `Junction ${node.id + 1}`, node.id)));
+        }
+        calculateTrip();
+    }
+
+    function calculateTrip() {
+        const result = document.getElementById('trip-result');
+        if (!origin || !destination) {
+            trip = null;
+            result.textContent = origin ? 'Now choose your destination.' : 'Routes adapt to the traffic.';
+            return;
+        }
+        trip = findRoute(origin, destination);
+        const arterial = trip.path.filter(lane => lane.edge.roadType === 'arterial').length;
+        result.textContent = origin === destination ? 'Choose a different destination.' :
+            `Blue route · about ${Math.round(trip.seconds)} simulated seconds · ${trip.path.length} streets, ${arterial} arterial. Live traffic included.`;
+    }
+
+    function setPlanning(value) {
+        planning = value;
+        if (planning && !exploring) toggleExplore();
+        document.body.classList.toggle('planning-trip', planning);
+        document.getElementById('planner-panel').hidden = !planning;
+        plannerButton.textContent = planning ? 'Close planner' : 'Plan a trip';
+        plannerButton.setAttribute('aria-expanded', String(planning));
+        render();
     }
 
     function updateLabels() {
@@ -429,6 +562,7 @@ if (ctx) {
             setTrafficLevel(town, trafficLevel);
             // Start with moving traffic, spread naturally along its lanes.
             for (let i = 0; i < 180; i++) updateTown(town, FIXED_STEP);
+            resetTrip();
         }
         updateView();
         document.getElementById('town-number').textContent = `Town ${seed.toString(36).slice(-4).toUpperCase().padStart(4, '0')}`;
@@ -467,7 +601,10 @@ if (ctx) {
         content.setAttribute('aria-hidden', String(exploring));
         exploreButton.textContent = exploring ? 'Back to links' : 'Watch the town';
         exploreButton.setAttribute('aria-pressed', String(exploring));
-        if (!exploring) window.scrollTo(0, savedScroll);
+        if (!exploring) {
+            setPlanning(false);
+            window.scrollTo(0, savedScroll);
+        }
     }
 
     pauseButton.addEventListener('click', () => {
@@ -480,6 +617,8 @@ if (ctx) {
     trafficControl.addEventListener('input', () => {
         trafficLevel = Number(trafficControl.value) / 100;
         setTrafficLevel(town, trafficLevel);
+        updateTrafficMetrics(town);
+        lastMetrics = -1;
         updateTrafficLabels();
         render();
     });
@@ -490,6 +629,23 @@ if (ctx) {
         status.textContent = 'A new town is ready. New streets, neighbourhoods and bus routes.';
     });
     exploreButton.addEventListener('click', toggleExplore);
+    plannerButton.addEventListener('click', () => setPlanning(!planning));
+    for (const select of [tripFrom, tripTo]) select.addEventListener('change', () => {
+        origin = tripFrom.value === '' ? null : town.nodes.find(n => n.id === Number(tripFrom.value));
+        destination = tripTo.value === '' ? null : town.nodes.find(n => n.id === Number(tripTo.value));
+        calculateTrip(); render();
+    });
+    canvas.addEventListener('click', event => {
+        if (!planning) return;
+        const x = event.clientX / scale + cameraX, y = event.clientY / scale + cameraY;
+        const node = town.nodes.reduce((a, b) => Math.hypot(a.x - x, a.y - y) < Math.hypot(b.x - x, b.y - y) ? a : b);
+        if (!origin || destination) { origin = node; destination = null; tripTo.value = ''; }
+        else destination = node;
+        const select = destination ? tripTo : tripFrom;
+        if (![...select.options].some(option => option.value === String(node.id))) select.add(new Option(`Junction ${node.id + 1}`, node.id));
+        select.value = node.id;
+        calculateTrip(); render();
+    });
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape' && exploring) {
             toggleExplore();
