@@ -25,10 +25,13 @@ cyclist if they cannot finish a pass. Roundabout gap checks account for cyclists
 lower speeds.
 
 **People** sets 0–400 residents, including people walking, queuing and riding.
-Half keep strolling along pavements throughout town, including streets without
-bus stops, walking in both directions and turning back before junctions. The
-others walk to a stop, queue for their route, board one at a time, and alight at a
-later stop. Each boarding adds 0.85 simulated seconds and each alighting adds
+Half choose destinations elsewhere in town and follow shortest walking routes
+along connected pavements, around street corners and across roads. Routes prefer
+zebra crossings; jaywalking is used when it saves enough walking. On arrival,
+people pause briefly before choosing another destination. The others walk to a
+stop, queue for their route, board one at a time, and alight at a later stop.
+After alighting they walk to a destination, then find a route to another bus
+stop from their current location. Each boarding adds 0.85 simulated seconds and each alighting adds
 0.65 seconds to the stop. Buses hold 18 passengers; full buses leave remaining
 people waiting. A small count appears above a stopped bus. Population changes
 preserve the street layout and remove passengers from queues and buses cleanly.
@@ -40,6 +43,7 @@ directions until the crossing is clear; pedestrians wait for vehicles already
 too close to stop. More people therefore also means more interruptions to traffic.
 Overtaking is disabled on zebra-crossing streets and during a jaywalk.
 
+`town-walking.mjs` builds the pavement graph and plans pedestrian journeys.
 `town-crossings.mjs` manages crossing requests, clearance and vehicle stop lines.
 `town-people.mjs` manages passenger journeys and boarding;
 `town-cyclists.mjs` manages opposing-lane reservations for overtaking.

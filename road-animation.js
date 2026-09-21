@@ -1,6 +1,6 @@
 import { crossingPersonPoint } from './town-crossings.mjs';
 import { TownView, bindTownGestures } from './town-view.mjs';
-import { createTown, updateTown, setTrafficLevel, setCyclistCount, setPeopleCount, updateTrafficMetrics, vehiclePoint, lanePoint, signalState, randomSource, pathPoint, offsetPath, isRoundabout } from './road-world.mjs?v=7';
+import { createTown, updateTown, setTrafficLevel, setCyclistCount, setPeopleCount, updateTrafficMetrics, vehiclePoint, lanePoint, signalState, randomSource, pathPoint, offsetPath, isRoundabout } from './road-world.mjs?v=8';
 
 const canvas = document.getElementById('road-canvas');
 const ctx = canvas?.getContext('2d');
@@ -407,7 +407,7 @@ if (ctx) {
             const normal = edge.width / 2 - edge.offset + 3;
             const nearStop = person.lane.stop ? Math.max(0, 1 - Math.abs(distance - person.lane.stop.distance) / 24) : 0;
             const pavement = index < 0 ? normal + (25 - normal) * nearStop : 25 + Math.floor(index / 10) * 7;
-            const pose = person.crossing ? crossingPersonPoint(person) : {
+            const pose = person.crossing ? crossingPersonPoint(person) : person.walkPose || {
                 x: p.x + Math.sin(p.angle) * pavement, y: p.y - Math.cos(p.angle) * pavement,
                 angle: p.angle + (person.direction === -1 ? Math.PI : 0)
             };

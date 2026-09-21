@@ -1,4 +1,5 @@
-import { requestCrossing, updateCrossings, clearUnusedCrossings } from './town-crossings.mjs';
+import { planWalk, followWalk } from './town-walking.mjs';
+import { updateCrossings, clearUnusedCrossings } from './town-crossings.mjs';
 // People have a persistent journey: pavement -> queue -> bus -> pavement.
 const COLOURS = ['#c66a52', '#478994', '#d5a23f', '#775e87', '#577553', '#436387'];
 export function startJourney(town, person, queued = false) {
@@ -7,12 +8,21 @@ export function startJourney(town, person, queued = false) {
     const route = routes[Math.floor(town.random() * routes.length)];
     const stops = [...new Set(route.path.filter(l => l.stop))];
     const index = Math.floor(town.random() * stops.length);
-    person.lane = stops[index];
+    const boardingLane = stops[index];
+    if (person.lane && !queued && planWalk(town, person, boardingLane)) {
+        person.destination = stops[(index + 1 + Math.floor(town.random() * (stops.length - 1))) % stops.length];
+        person.route = route.number; person.state = 'walking'; person.bus = null;
+        return;
+    }
+    if (person.lane && !queued) {
+        person.state = 'strolling'; planWalk(town, person); return;
+    }
+    person.lane = boardingLane;
     person.destination = stops[(index + 1 + Math.floor(town.random() * (stops.length - 1))) % stops.length];
     person.route = route.number;
     person.state = queued ? 'queue' : 'walking';
     person.distance = queued ? person.lane.stop.distance : Math.max(5, person.lane.stop.distance * town.random());
-    person.bus = null;
+    person.bus = null; person.walkRoute = null;
     if (queued) person.lane.stop.queue.push(person);
 }
 function startStroll(town, person) {
@@ -21,6 +31,7 @@ function startStroll(town, person) {
     if (!lane) { startJourney(town, person); return; }
     Object.assign(person, { state: 'strolling', lane, distance: 10 + town.random() * (lane.length - 20),
         direction: town.random() < 0.5 ? -1 : 1, pause: 0, bus: null, crossCooldown: 3 + town.random() * 12 });
+    planWalk(town, person);
 }
 
 export function setPeopleCount(town, count) {
@@ -43,31 +54,27 @@ export function setPeopleCount(town, count) {
 export function updatePeople(town, dt) {
     updateCrossings(town, dt);
     for (const person of town.people || []) {
+        if (person.crossing) continue;
         if (person.state === 'strolling') {
-            // Walk the length of the pavement in both directions, staying clear
-            // of junctions. Keep an ongoing population out walking, even when
-            // every bus passenger has reached their stop.
-            person.crossCooldown = Math.max(0, (person.crossCooldown || 0) - dt);
-            if (!person.crossCooldown) {
-                const zebra = person.lane.edge.crossings.find(c => c.zebra && Math.abs(c.distances.get(person.lane) - person.distance) < person.speed * dt + 1);
-                if (zebra && requestCrossing(town, person, zebra)) continue;
-                if (town.random() < dt * 0.009 && requestCrossing(town, person)) continue;
-            }
             if (person.pause > 0) { person.pause -= dt; continue; }
-            person.distance += person.direction * person.speed * dt;
-            if (person.distance >= person.lane.length - 8 || person.distance <= 8) {
-                person.distance = Math.max(8, Math.min(person.lane.length - 8, person.distance));
-                person.direction *= -1;
-                person.pause = 0.6 + town.random() * 1.5;
+            if (!person.walkRoute && !planWalk(town, person)) continue;
+            if (followWalk(town, person, dt)) {
+                person.walkTrips = (person.walkTrips || 0) + 1;
+                person.pause = 2 + town.random() * 5;
+                planWalk(town, person);
             }
         } else if (person.state === 'walking') {
-            person.distance = Math.min(person.lane.stop.distance, person.distance + person.speed * dt);
-            if (person.distance === person.lane.stop.distance) {
-                person.state = 'queue'; person.lane.stop.queue.push(person);
+            const arrived = person.walkRoute ? followWalk(town, person, dt) :
+                (person.distance = Math.min(person.lane.stop.distance, person.distance + person.speed * dt)) === person.lane.stop.distance;
+            if (arrived) {
+                person.walkRoute = null; person.state = 'queue'; person.lane.stop.queue.push(person);
             }
         } else if (person.state === 'leaving') {
-            person.distance += person.speed * dt;
-            if (person.distance > Math.min(person.lane.length - 6, person.lane.stop.distance + 75)) startJourney(town, person);
+            if (!person.walkRoute) planWalk(town, person);
+            if (person.walkRoute && followWalk(town, person, dt)) {
+                person.walkTrips = (person.walkTrips || 0) + 1;
+                person.walkRoute = null; startJourney(town, person);
+            }
         }
     }
 }
@@ -86,7 +93,7 @@ export function serveBus(town, bus, dt) {
     const departing = bus.passengers.find(p => p.destination === bus.lane);
     if (departing) {
         bus.passengers.splice(bus.passengers.indexOf(departing), 1);
-        Object.assign(departing, { state: 'leaving', lane: bus.lane, distance: bus.lane.stop.distance + 12, bus: null, trips: departing.trips + 1 });
+        Object.assign(departing, { state: 'leaving', walkRoute: null, walkPose: null, lane: bus.lane, distance: bus.lane.stop.distance + 12, bus: null, trips: departing.trips + 1 });
         service.clock += 0.65;
         return;
     }

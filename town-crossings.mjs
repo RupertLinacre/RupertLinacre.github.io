@@ -104,7 +104,9 @@ export function updateCrossings(town, dt) {
             if (p.crossProgress < 1) continue;
             p.lane = c.edge.lanes.find(l => l !== p.lane);
             p.distance = c.distances.get(p.lane); p.direction *= -1;
-            p.state = 'strolling'; p.crossing = null; p.crossCooldown = 18 + town.random() * 25;
+            p.state = p.resumeWalkState || 'strolling'; p.resumeWalkState = null;
+            if (p.walkRoute) p.walkIndex++;
+            p.crossing = null; p.crossCooldown = 18 + town.random() * 25;
             c.users.delete(p);
             town[c.zebra ? 'zebraTrips' : 'jaywalkTrips'] = (town[c.zebra ? 'zebraTrips' : 'jaywalkTrips'] || 0) + 1;
         }

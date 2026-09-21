@@ -106,7 +106,7 @@ test('people keep walking on pavements throughout town as well as waiting for bu
     advance(town, 3);
     assert.ok(walkers.every((p, i) => Math.abs(p.distance - positions[i]) > 0.1));
     advance(town, 90);
-    assert.ok(walkers.every(p => ['strolling', 'crossing', 'crossing_wait'].includes(p.state) && p.distance >= 8 && p.distance <= p.lane.length - 8));
+    assert.ok(walkers.every(p => ['strolling', 'crossing', 'crossing_wait'].includes(p.state) && p.distance >= 0 && p.distance <= p.lane.length));
     assert.ok(town.people.some(p => p.state === 'queue' || p.state === 'riding'));
     setPeopleCount(town, 0); assert.equal(town.people.length, 0);
 });
