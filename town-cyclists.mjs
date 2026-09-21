@@ -23,7 +23,7 @@ export function updateOvertakes(town, occupied, dt) {
         }
     }
     for (const [lane, queue] of occupied) {
-        if (lane.edge.singleTrack || lane.edge.passing || lane.stop || lane.length < 230) continue;
+        if (lane.edge.crossings?.some(c => c.zebra || c.users.size) || lane.edge.singleTrack || lane.edge.passing || lane.stop || lane.length < 230) continue;
         for (let i = 1; i < queue.length; i++) {
             const car = queue[i], bike = queue[i - 1];
             if (car.bus || car.cyclist || car.overtake || !bike.cyclist || car.reserved ||

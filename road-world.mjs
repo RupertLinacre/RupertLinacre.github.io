@@ -1,3 +1,4 @@
+import { prepareCrossings, crossingTrafficLimit } from './town-crossings.mjs';
 import { setPeopleCount, updatePeople, serveBus, unloadRemovedBus } from './town-people.mjs';
 import { updateOvertakes, passingPair, clearOvertake } from './town-cyclists.mjs';
 export { setPeopleCount } from './town-people.mjs';
@@ -136,6 +137,7 @@ export function createTown(width, height, seed) {
         baseTraffic: Math.min(250, Math.max(12, Math.round(lanes.length * 0.3))) };
     town.spawnLanes = lanes.flatMap(lane => Array(lane.edge.roadType === 'arterial' ? 4 : lane.edge.roadType === 'collector' ? 2 : 1).fill(lane));
     routes.forEach(route => { route.baseBuses = Math.max(2, Math.round(route.path.length / 7)); });
+    prepareCrossings(town);
     setTrafficLevel(town, 1);
     setPeopleCount(town, 0);
     updateTrafficMetrics(town);
@@ -154,7 +156,7 @@ function addVehicle(town, route = null, cyclist = false) {
     const distance = length / 2 + 12 + random() * Math.max(0, lane.length - length - 36);
     // Never insert a vehicle into an occupied junction or the gap reserved by a
     // turning vehicle. Generous insertion spacing allows existing traffic to brake.
-    if (lane.edge.passing || lane.from.occupants.size || lane.to.occupants.size || distance > lane.length - length / 2 - 4 ||
+    if (lane.edge.crossings.some(c => c.users.size) || lane.edge.passing || lane.from.occupants.size || lane.to.occupants.size || distance > lane.length - length / 2 - 4 ||
         lane.edge.singleTrack && distance > lane.singleEntry - length / 2 - 10 ||
         vehicles.some(v => v.phase === 'lane' && v.lane === lane &&
             Math.abs(v.distance - distance) < (v.length + length) / 2 + GAP + 5)) return false;
@@ -314,7 +316,7 @@ export function updateTown(town, dt) {
         if (vehicle.reserved && vehicle.reserved !== lane.to && vehicle.distance > vehicle.length / 2 + 4) {
             releaseJunction(vehicle);
         }
-        let limit = lane.length;
+        let limit = Math.min(lane.length, crossingTrafficLimit(vehicle));
         let targetSpeed = Math.min(vehicle.maxSpeed, lane.edge.speed);
         if (vehicle.overtake?.aborting) targetSpeed = 0;
         const queue = occupied.get(lane);

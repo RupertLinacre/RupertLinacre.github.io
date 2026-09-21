@@ -59,7 +59,7 @@ function passFixture(oncoming = false) {
     setTrafficLevel(town, 0); setCyclistCount(town, 0);
     const lane = town.lanes.find(l => !l.stop && !l.edge.singleTrack);
     // A straight, empty test road gives a controlled passing opportunity.
-    lane.edge.speed = 48;
+    lane.edge.speed = 48; lane.edge.crossings = [];
     for (const l of lane.edge.lanes) {
         l.path = measure(Array.from({ length: 101 }, (_, i) => ({ x: i * 10, y: l === lane ? 0 : 26, angle: 0 })));
         l.length = 1000; l.start = l.path.points[0]; l.end = l.path.points.at(-1);
@@ -106,7 +106,7 @@ test('people keep walking on pavements throughout town as well as waiting for bu
     advance(town, 3);
     assert.ok(walkers.every((p, i) => Math.abs(p.distance - positions[i]) > 0.1));
     advance(town, 90);
-    assert.ok(walkers.every(p => p.state === 'strolling' && p.distance >= 8 && p.distance <= p.lane.length - 8));
+    assert.ok(walkers.every(p => ['strolling', 'crossing', 'crossing_wait'].includes(p.state) && p.distance >= 8 && p.distance <= p.lane.length - 8));
     assert.ok(town.people.some(p => p.state === 'queue' || p.state === 'riding'));
     setPeopleCount(town, 0); assert.equal(town.people.length, 0);
 });

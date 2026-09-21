@@ -1,3 +1,4 @@
+import { requestCrossing, updateCrossings, clearUnusedCrossings } from './town-crossings.mjs';
 // People have a persistent journey: pavement -> queue -> bus -> pavement.
 const COLOURS = ['#c66a52', '#478994', '#d5a23f', '#775e87', '#577553', '#436387'];
 export function startJourney(town, person, queued = false) {
@@ -19,7 +20,7 @@ function startStroll(town, person) {
     const lane = lanes[Math.floor(town.random() * lanes.length)];
     if (!lane) { startJourney(town, person); return; }
     Object.assign(person, { state: 'strolling', lane, distance: 10 + town.random() * (lane.length - 20),
-        direction: town.random() < 0.5 ? -1 : 1, pause: 0, bus: null });
+        direction: town.random() < 0.5 ? -1 : 1, pause: 0, bus: null, crossCooldown: 3 + town.random() * 12 });
 }
 
 export function setPeopleCount(town, count) {
@@ -30,6 +31,7 @@ export function setPeopleCount(town, count) {
     const keep = new Set(town.people);
     for (const lane of town.lanes) if (lane.stop) lane.stop.queue = lane.stop.queue.filter(p => keep.has(p));
     for (const bus of town.vehicles) if (bus.passengers) bus.passengers = bus.passengers.filter(p => keep.has(p));
+    clearUnusedCrossings(town);
     while (town.people.length < count) {
         const id = town.nextPersonId++;
         const person = { id, colour: COLOURS[id % COLOURS.length], speed: 7 + town.random() * 4, trips: 0 };
@@ -39,11 +41,18 @@ export function setPeopleCount(town, count) {
     }
 }
 export function updatePeople(town, dt) {
+    updateCrossings(town, dt);
     for (const person of town.people || []) {
         if (person.state === 'strolling') {
             // Walk the length of the pavement in both directions, staying clear
             // of junctions. Keep an ongoing population out walking, even when
             // every bus passenger has reached their stop.
+            person.crossCooldown = Math.max(0, (person.crossCooldown || 0) - dt);
+            if (!person.crossCooldown) {
+                const zebra = person.lane.edge.crossings.find(c => c.zebra && Math.abs(c.distances.get(person.lane) - person.distance) < person.speed * dt + 1);
+                if (zebra && requestCrossing(town, person, zebra)) continue;
+                if (town.random() < dt * 0.009 && requestCrossing(town, person)) continue;
+            }
             if (person.pause > 0) { person.pause -= dt; continue; }
             person.distance += person.direction * person.speed * dt;
             if (person.distance >= person.lane.length - 8 || person.distance <= 8) {

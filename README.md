@@ -34,6 +34,13 @@ people waiting. A small count appears above a stopped bus. Population changes
 preserve the street layout and remove passengers from queues and buses cleanly.
 Removing a bus returns its passengers to stops. These are illustrative journeys.
 
+Zebra crossings have flashing amber Belisha beacons. Pavement walkers cross
+there and occasionally jaywalk elsewhere. Cars, buses and cyclists stop in both
+directions until the crossing is clear; pedestrians wait for vehicles already
+too close to stop. More people therefore also means more interruptions to traffic.
+Overtaking is disabled on zebra-crossing streets and during a jaywalk.
+
+`town-crossings.mjs` manages crossing requests, clearance and vehicle stop lines.
 `town-people.mjs` manages passenger journeys and boarding;
 `town-cyclists.mjs` manages opposing-lane reservations for overtaking.
 

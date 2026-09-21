@@ -1,5 +1,6 @@
+import { crossingPersonPoint } from './town-crossings.mjs';
 import { TownView, bindTownGestures } from './town-view.mjs';
-import { createTown, updateTown, setTrafficLevel, setCyclistCount, setPeopleCount, updateTrafficMetrics, vehiclePoint, lanePoint, signalState, randomSource, pathPoint, offsetPath, isRoundabout } from './road-world.mjs?v=6';
+import { createTown, updateTown, setTrafficLevel, setCyclistCount, setPeopleCount, updateTrafficMetrics, vehiclePoint, lanePoint, signalState, randomSource, pathPoint, offsetPath, isRoundabout } from './road-world.mjs?v=7';
 
 const canvas = document.getElementById('road-canvas');
 const ctx = canvas?.getContext('2d');
@@ -291,6 +292,18 @@ if (ctx) {
                 }
             }
         }
+        for (const crossing of town.crossings) {
+            const { point: p, edge } = crossing;
+            g.save(); g.translate(p.x, p.y); g.rotate(p.angle);
+            g.fillStyle = edge.colour; g.fillRect(-11, -edge.width / 2, 22, edge.width);
+            g.fillStyle = '#f7f1de';
+            for (let y = -edge.width / 2 + 2; y < edge.width / 2 - 2; y += 7)
+                g.fillRect(-9, y, 18, Math.min(3.5, edge.width / 2 - 2 - y));
+            for (const side of [-1, 1]) {
+                line(g, -15 * side, -side * (edge.width / 2 - 2), -15 * side, 0, '#f7f1de', 1.5);
+            }
+            g.restore();
+        }
         for (const node of town.nodes) {
             if (isRoundabout(node)) {
                 const full = node.control === 'roundabout';
@@ -394,10 +407,14 @@ if (ctx) {
             const normal = edge.width / 2 - edge.offset + 3;
             const nearStop = person.lane.stop ? Math.max(0, 1 - Math.abs(distance - person.lane.stop.distance) / 24) : 0;
             const pavement = index < 0 ? normal + (25 - normal) * nearStop : 25 + Math.floor(index / 10) * 7;
-            const x = p.x + Math.sin(p.angle) * pavement, y = p.y - Math.cos(p.angle) * pavement;
+            const pose = person.crossing ? crossingPersonPoint(person) : {
+                x: p.x + Math.sin(p.angle) * pavement, y: p.y - Math.cos(p.angle) * pavement,
+                angle: p.angle + (person.direction === -1 ? Math.PI : 0)
+            };
+            const { x, y } = pose;
             if (!visible({ x, y })) continue;
-            const stride = index < 0 && !(person.pause > 0) ? Math.sin(town.time * person.speed + person.id) * 1.5 : 0;
-            ctx.save(); ctx.translate(x, y); ctx.rotate(p.angle + (person.direction === -1 ? Math.PI : 0));
+            const stride = index < 0 && person.state !== 'crossing_wait' && !(person.pause > 0) ? Math.sin(town.time * person.speed + person.id) * 1.5 : 0;
+            ctx.save(); ctx.translate(x, y); ctx.rotate(pose.angle);
             circle(ctx, 1, 2, 3.8, '#304b3c25');
             line(ctx, -3 + stride, -1.5, 0, -1, '#40504b', 1.7);
             line(ctx, -3 - stride, 1.5, 0, 1, '#40504b', 1.7);
@@ -479,6 +496,23 @@ if (ctx) {
         g.restore();
     }
 
+    function drawBeacons() {
+        const lit = Math.sin(town.time * Math.PI * 2) > 0;
+        for (const { point: p, edge } of town.crossings) {
+            if (!visible(p, 60)) continue;
+            for (const side of [-1, 1]) {
+                const x = p.x + Math.sin(p.angle) * side * (edge.width / 2 + 5);
+                const y = p.y - Math.cos(p.angle) * side * (edge.width / 2 + 5);
+                line(ctx, x + 1, y + 1, x + 5, y - 9, '#304b3c30', 3);
+                line(ctx, x, y, x, y - 13, '#384b46', 2.6);
+                for (const dy of [2, 8]) line(ctx, x, y - dy, x, y - dy - 3, '#f7f1de', 2.6);
+                if (lit) circle(ctx, x, y - 15, 7, '#ffc34535');
+                circle(ctx, x, y - 15, 4.2, '#46534a');
+                circle(ctx, x, y - 15, 3.3, lit ? '#ffc345' : '#b98331');
+            }
+        }
+    }
+
     function render() {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -486,6 +520,7 @@ if (ctx) {
         worldTransform(ctx);
         drawPeople();
         town.vehicles.forEach(drawVehicle);
+        drawBeacons();
         for (const lane of town.lanes) if (lane.to.signal) drawSignal(lane);
     }
 
