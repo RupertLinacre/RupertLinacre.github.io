@@ -1,3 +1,6 @@
+import { setPeopleCount, updatePeople, serveBus, unloadRemovedBus } from './town-people.mjs';
+import { updateOvertakes, passingPair, clearOvertake } from './town-cyclists.mjs';
+export { setPeopleCount } from './town-people.mjs';
 import { measure, pathPoint, offsetPath } from './street-geometry.mjs';
 import { createStreetLayout } from './street-layout.mjs';
 import { findRoute, planRoadNetwork } from './traffic-planner.mjs';
@@ -44,7 +47,11 @@ export function lanePoint(lane, distance) {
 }
 
 export function vehiclePoint(vehicle) {
-    if (vehicle.phase === 'lane') return lanePoint(vehicle.lane, vehicle.distance);
+    if (vehicle.phase === 'lane') {
+        const p = lanePoint(vehicle.lane, vehicle.distance);
+        const offset = (vehicle.overtake?.offset || 0) * vehicle.lane.edge.offset * 2;
+        return { ...p, x: p.x - Math.sin(p.angle) * offset, y: p.y + Math.cos(p.angle) * offset };
+    }
     return pathPoint(vehicle.turn, vehicle.distance);
 }
 
@@ -130,29 +137,30 @@ export function createTown(width, height, seed) {
     town.spawnLanes = lanes.flatMap(lane => Array(lane.edge.roadType === 'arterial' ? 4 : lane.edge.roadType === 'collector' ? 2 : 1).fill(lane));
     routes.forEach(route => { route.baseBuses = Math.max(2, Math.round(route.path.length / 7)); });
     setTrafficLevel(town, 1);
+    setPeopleCount(town, 0);
     updateTrafficMetrics(town);
     return town;
 }
 
 const CAR_COLOURS = ['#efe9d9', '#537d9b', '#d68563', '#e4b94f', '#718978', '#a7b9bc', '#49556a'];
 
-function addVehicle(town, route = null) {
+function addVehicle(town, route = null, cyclist = false) {
     const { random, vehicles } = town;
     const lanes = town.spawnLanes;
     const bus = !!route;
     const routeIndex = route ? Math.floor(random() * route.path.length) : 0;
     const lane = route ? route.path[routeIndex] : lanes[Math.floor(random() * lanes.length)];
-    const length = bus ? 34 : 21 + random() * 4;
+    const length = cyclist ? 13 : bus ? 34 : 21 + random() * 4;
     const distance = length / 2 + 12 + random() * Math.max(0, lane.length - length - 36);
     // Never insert a vehicle into an occupied junction or the gap reserved by a
     // turning vehicle. Generous insertion spacing allows existing traffic to brake.
-    if (lane.from.occupants.size || lane.to.occupants.size || distance > lane.length - length / 2 - 4 ||
+    if (lane.edge.passing || lane.from.occupants.size || lane.to.occupants.size || distance > lane.length - length / 2 - 4 ||
         lane.edge.singleTrack && distance > lane.singleEntry - length / 2 - 10 ||
         vehicles.some(v => v.phase === 'lane' && v.lane === lane &&
             Math.abs(v.distance - distance) < (v.length + length) / 2 + GAP + 5)) return false;
-    const vehicle = { id: town.nextVehicleId++, bus, route, routeIndex, lane, length,
-        width: bus ? 14 : 11, distance, phase: 'lane', speed: 0,
-        maxSpeed: bus ? 35 + random() * 4 : 45 + random() * 12,
+    const vehicle = { id: town.nextVehicleId++, bus, cyclist, route, routeIndex, lane, length,
+        width: cyclist ? 5 : bus ? 14 : 11, distance, phase: 'lane', speed: 0,
+        maxSpeed: cyclist ? 12 + random() * 4 : bus ? 35 + random() * 4 : 45 + random() * 12,
         colour: route ? route.colour : CAR_COLOURS[Math.floor(random() * CAR_COLOURS.length)],
         next: null, turn: null, reserved: null, dwell: 0, narrowPermit: null, destination: null, itinerary: [],
         served: !!lane.stop && distance > lane.stop.distance - 2,
@@ -166,11 +174,13 @@ export function setTrafficLevel(town, level) {
     if (!Number.isFinite(level)) return;
     town.trafficLevel = Math.max(0, Math.min(6, level));
     function setGroup(route, target) {
-        const group = town.vehicles.filter(v => v.route === route);
+        const group = town.vehicles.filter(v => !v.cyclist && v.route === route);
         const removed = new Set(group.slice(target));
         for (const vehicle of removed) {
             releaseJunction(vehicle);
             releaseSingleTrack(vehicle);
+            clearOvertake(vehicle);
+            if (vehicle.bus) unloadRemovedBus(town, vehicle);
         }
         town.vehicles = town.vehicles.filter(v => !removed.has(v));
         let needed = Math.max(0, target - group.length);
@@ -185,6 +195,16 @@ export function setTrafficLevel(town, level) {
         setGroup(route, target);
     }
     setGroup(null, Math.max(0, Math.round(town.baseTraffic * town.trafficLevel) - buses));
+}
+
+export function setCyclistCount(town, count) {
+    count = Math.max(0, Math.min(150, Math.round(Number(count) || 0)));
+    const cyclists = town.vehicles.filter(v => v.cyclist);
+    const removed = new Set(cyclists.slice(count));
+    for (const bike of removed) { releaseJunction(bike); releaseSingleTrack(bike); }
+    town.vehicles = town.vehicles.filter(v => !removed.has(v));
+    let needed = Math.max(0, count - cyclists.length);
+    for (let attempt = 0; needed && attempt < count * 40; attempt++) if (addVehicle(town, null, true)) needed--;
 }
 
 function planNext(town, vehicle) {
@@ -205,11 +225,11 @@ function planNext(town, vehicle) {
 }
 
 function crossingSpeed(vehicle) {
-    if (isRoundabout(vehicle.lane.to)) return 20;
+    if (isRoundabout(vehicle.lane.to)) return Math.min(20, vehicle.maxSpeed);
     if (Math.cos(vehicle.next.start.angle - vehicle.lane.end.angle) > 0.85) {
         return Math.min(vehicle.maxSpeed, vehicle.lane.edge.speed, vehicle.next.edge.speed);
     }
-    return 20;
+    return Math.min(20, vehicle.maxSpeed);
 }
 
 export function updateTrafficMetrics(town) {
@@ -233,6 +253,7 @@ export function updateTrafficMetrics(town) {
 
 export function updateTown(town, dt) {
     town.time += dt;
+    updatePeople(town, dt);
     if (town.time >= town.metricsAt) { updateTrafficMetrics(town); town.metricsAt = town.time + 0.75; }
     const occupied = new Map(town.lanes.map(lane => [lane, []]));
     for (const vehicle of town.vehicles) {
@@ -240,7 +261,9 @@ export function updateTown(town, dt) {
     }
     for (const queue of occupied.values()) queue.sort((a, b) => b.distance - a.distance);
     updateSingleTracks(town, occupied);
+    updateOvertakes(town, occupied, dt);
     const hasRoom = (vehicle, next) => {
+        if (next.edge.passing) return false;
         // Reserve real exit space, including other roundabout users who have
         // already chosen this exit but have not reached its lane yet.
         let space = Math.min(next.length, next.edge.singleTrack ? next.singleEntry : Infinity) - 4;
@@ -253,7 +276,7 @@ export function updateTown(town, dt) {
     const candidates = new Map();
     for (const [lane, queue] of occupied) {
         const vehicle = queue[0];
-        if (!vehicle || vehicle.reserved) continue;
+        if (!vehicle || vehicle.reserved || vehicle.overtake) continue;
         const node = lane.to;
         const lookahead = !node.signal && !isRoundabout(node) && lane.hasPriority ? Math.max(6, Math.min(50, vehicle.speed * 1.3)) : 6;
         if (vehicle.distance < lane.length - vehicle.length / 2 - lookahead ||
@@ -293,10 +316,10 @@ export function updateTown(town, dt) {
         }
         let limit = lane.length;
         let targetSpeed = Math.min(vehicle.maxSpeed, lane.edge.speed);
+        if (vehicle.overtake?.aborting) targetSpeed = 0;
         const queue = occupied.get(lane);
-        const index = queue.indexOf(vehicle);
-        if (index > 0) {
-            const leader = queue[index - 1];
+        for (const leader of queue) {
+            if (leader === vehicle || leader.distance <= vehicle.distance || passingPair(vehicle, leader)) continue;
             limit = Math.min(limit, leader.distance - (leader.length + vehicle.length) / 2 - GAP);
         }
         for (const crossing of lane.to.occupants) {
@@ -314,14 +337,8 @@ export function updateTown(town, dt) {
         if (vehicle.bus && lane.stop && !vehicle.served) {
             limit = Math.min(limit, lane.stop.distance);
             if (vehicle.distance >= lane.stop.distance - 0.3) {
-                if (!vehicle.dwell) vehicle.dwell = 2.2 + town.random() * 1.5;
-                vehicle.dwell -= dt;
+                serveBus(town, vehicle, dt);
                 targetSpeed = 0;
-                if (vehicle.dwell <= 0) {
-                    vehicle.served = true;
-                    vehicle.dwell = 0;
-                    vehicle.stopsVisited++;
-                }
             }
         }
         const available = Math.max(0, limit - vehicle.distance);

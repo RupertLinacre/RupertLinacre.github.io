@@ -34,14 +34,16 @@ export function makeTurn(incoming, outgoing) {
 }
 
 export function roundaboutHasGap(node, vehicle) {
+    if (vehicle.maxSpeed === 0) return false;
     const turn = makeTurn(vehicle.lane, vehicle.next);
     // A mini has room for one manoeuvre at a time. Full roundabouts can carry
     // several cars, but a gap must remain safe throughout the entry manoeuvre.
     if (node.control === 'mini') return node.occupants.size === 0;
     function projected(v, path, time) {
-        const speed = Math.min(20, v.speed);
-        const accelerating = Math.min(time, (20 - speed) / 22);
-        const movement = speed * accelerating + 11 * accelerating ** 2 + 20 * (time - accelerating);
+        const maximum = Math.min(20, v.maxSpeed ?? 20);
+        const speed = Math.min(maximum, v.speed);
+        const accelerating = Math.min(time, (maximum - speed) / 22);
+        const movement = speed * accelerating + 11 * accelerating ** 2 + maximum * (time - accelerating);
         let distance = v.distance + movement;
         if (v.phase === 'lane') {
             if (distance <= v.lane.length) return pathPoint(v.lane.path, distance);
@@ -60,7 +62,7 @@ export function roundaboutHasGap(node, vehicle) {
         const gap = (vehicle.length + other.length) / 2 + 12;
         if (ahead < gap || behind < gap + 28) return false;
         if (other.lane === vehicle.lane && other.phase === 'lane') return false;
-        const duration = (vehicle.lane.length - vehicle.distance + turn.length) / 20 + 1;
+        const duration = (vehicle.lane.length - vehicle.distance + turn.length) / Math.min(20, vehicle.maxSpeed ?? 20) + 1;
         for (let t = 0; t <= duration; t += 0.2) {
             const a = projected(vehicle, turn, t), b = projected(other, path, t);
             if (Math.hypot(a.x - b.x, a.y - b.y) < (vehicle.length + other.length) / 2 + 5) return false;

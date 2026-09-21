@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTown, updateTown, vehiclePoint, setTrafficLevel } from '../road-world.mjs';
+import { createTown, updateTown, vehiclePoint, setTrafficLevel, setPeopleCount, setCyclistCount } from '../road-world.mjs';
 
 // Separating-axis check on the actual oriented vehicle bodies, with a small
 // tolerance for antialiased body edges. This catches crossings across lanes too.
@@ -42,4 +42,32 @@ test('vehicle bodies stay separated at roundabouts and single tracks, including 
         }
     }
     assert.ok(simultaneous, 'full roundabouts should safely admit more than one vehicle');
+});
+
+
+test('cyclists and overtaking cars remain separated in mixed traffic with passenger queues', () => {
+    for (const seed of [1, 42]) {
+        const town = createTown(2400, 1700, seed);
+        setCyclistCount(town, 30); setPeopleCount(town, 180);
+        for (let tick = 0; tick < 60 * 120; tick++) {
+            if (tick === 2400) { setCyclistCount(town, 100); setPeopleCount(town, 400); setTrafficLevel(town, 3); }
+            if (tick === 5400) { setCyclistCount(town, 0); setTrafficLevel(town, 0.5); setPeopleCount(town, 40); }
+            updateTown(town, 1 / 60);
+            if (tick % 12) continue;
+            const rectangles = town.vehicles.map(v => {
+                const p = vehiclePoint(v);
+                return { v, p, x: { x: Math.cos(p.angle), y: Math.sin(p.angle) }, y: { x: -Math.sin(p.angle), y: Math.cos(p.angle) } };
+            });
+            for (let i = 0; i < rectangles.length; i++) for (let j = i + 1; j < rectangles.length; j++) {
+                assert.ok(!overlaps(rectangles[i], rectangles[j]),
+                    `mixed overlap seed ${seed}, time ${tick / 60}, vehicles ${rectangles[i].v.id}/${rectangles[j].v.id}`);
+            }
+            const queued = town.lanes.flatMap(l => l.stop?.queue || []);
+            const riders = town.vehicles.flatMap(v => v.passengers || []);
+            const walkers = town.people.filter(p => p.state === 'walking' || p.state === 'leaving');
+            assert.equal(new Set([...queued, ...riders, ...walkers]).size, town.people.length);
+            assert.equal(queued.length + riders.length + walkers.length, town.people.length);
+        }
+        assert.ok(town.edges.every(e => !e.passing || town.vehicles.includes(e.passing)));
+    }
 });

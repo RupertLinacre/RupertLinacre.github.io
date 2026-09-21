@@ -1,5 +1,5 @@
 import { TownView, bindTownGestures } from './town-view.mjs';
-import { createTown, updateTown, setTrafficLevel, updateTrafficMetrics, vehiclePoint, lanePoint, signalState, randomSource, pathPoint, offsetPath, isRoundabout } from './road-world.mjs?v=5';
+import { createTown, updateTown, setTrafficLevel, setCyclistCount, setPeopleCount, updateTrafficMetrics, vehiclePoint, lanePoint, signalState, randomSource, pathPoint, offsetPath, isRoundabout } from './road-world.mjs?v=6';
 
 const canvas = document.getElementById('road-canvas');
 const ctx = canvas?.getContext('2d');
@@ -16,6 +16,8 @@ if (ctx) {
     const content = document.getElementById('page-content');
     const speedControl = document.getElementById('simulation-speed');
     const trafficControl = document.getElementById('traffic-level');
+    const cyclistControl = document.getElementById('cyclist-count');
+    const peopleControl = document.getElementById('people-count');
     const zoomControl = document.getElementById('town-zoom');
     const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
     let paused = motionPreference.matches;
@@ -381,6 +383,27 @@ if (ctx) {
         g.restore();
     }
 
+    function drawPeople() {
+        for (const person of town.people) {
+            if (person.state === 'riding' || !person.lane) continue;
+            const queue = person.lane.stop.queue;
+            const index = person.state === 'queue' ? queue.indexOf(person) : -1;
+            const distance = index < 0 ? person.distance : Math.max(3, person.lane.stop.distance - (index % 10) * 6);
+            const p = lanePoint(person.lane, distance);
+            const pavement = 25 + (index < 0 ? 0 : Math.floor(index / 10) * 7);
+            const x = p.x + Math.sin(p.angle) * pavement, y = p.y - Math.cos(p.angle) * pavement;
+            if (!visible({ x, y })) continue;
+            const stride = index < 0 ? Math.sin(town.time * person.speed + person.id) * 1.5 : 0;
+            ctx.save(); ctx.translate(x, y); ctx.rotate(p.angle);
+            circle(ctx, 1, 2, 3.8, '#304b3c25');
+            line(ctx, -3 + stride, -1.5, 0, -1, '#40504b', 1.7);
+            line(ctx, -3 - stride, 1.5, 0, 1, '#40504b', 1.7);
+            rounded(ctx, -1.5, -3, 4, 6, 2, person.colour);
+            circle(ctx, 1, 0, 2.2, '#dfb994');
+            ctx.restore();
+        }
+    }
+
     function drawVehicle(vehicle) {
         const p = vehiclePoint(vehicle);
         if (!visible(p)) return;
@@ -390,6 +413,19 @@ if (ctx) {
         g.save();
         g.translate(p.x, p.y);
         g.rotate(p.angle);
+        if (vehicle.cyclist) {
+            const pedal = Math.sin(vehicle.distanceTravelled * 0.5) * 2.5;
+            line(g, -5, 0, 5, 0, '#344f50', 1.5);
+            for (const x of [-5, 5]) rounded(g, x - 2, -1, 4, 2, 1, '#33454a');
+            line(g, -3, -pedal, 1, 0, '#ddd5b6', 1.6);
+            line(g, -3, pedal, 1, 0, '#607e87', 1.6);
+            line(g, 4, -3, 4, 3, '#344f50', 1.2);
+            rounded(g, -2.5, -2.8, 6, 5.6, 2, vehicle.colour);
+            circle(g, 2, 0, 2.2, '#f4dba2');
+            line(g, 2.5, -2, 4, -3, '#dfb994', 1);
+            line(g, 2.5, 2, 4, 3, '#dfb994', 1);
+            g.restore(); return;
+        }
         rounded(g, -length / 2 + 2, -width / 2 + 3, length, width, 3, '#263e3c35');
         // Tyres remain visible either side of the body.
         for (const axle of [-length * 0.3, length * 0.29]) {
@@ -412,6 +448,13 @@ if (ctx) {
             g.textAlign = 'center';
             g.textBaseline = 'middle';
             g.fillText(vehicle.route.number, 5, 0.4);
+            const passengers = vehicle.passengers?.length || 0;
+            for (let i = 0; i < Math.ceil(passengers / 2); i++) circle(g, -11 + (i % 5) * 4.5, i < 5 ? -4 : 4, 1, '#d4a04c');
+            if (vehicle.dwell > 0) {
+                rounded(g, -17, -25, 34, 11, 3, '#fff9e9', '#d6dcc8');
+                g.font = 'bold 7px system-ui'; g.fillStyle = '#476151';
+                g.fillText(`${passengers}/${vehicle.capacity || 18}`, 0, -19);
+            }
         } else {
             rounded(g, -length * 0.19, -width / 2 + 1, length * 0.48, width - 2, 2, '#3e626d');
             rounded(g, -length * 0.12, -width / 2 + 1, length * 0.26, width - 2, 1, vehicle.colour);
@@ -438,6 +481,7 @@ if (ctx) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(scenery, 0, 0);
         worldTransform(ctx);
+        drawPeople();
         town.vehicles.forEach(drawVehicle);
         for (const lane of town.lanes) if (lane.to.signal) drawSignal(lane);
     }
@@ -450,7 +494,10 @@ if (ctx) {
 
     function updateTrafficLabels() {
         const buses = town.vehicles.filter(v => v.bus).length;
-        const cars = town.vehicles.length - buses;
+        const bikes = town.vehicles.filter(v => v.cyclist).length;
+        const cars = town.vehicles.length - buses - bikes;
+        document.getElementById('cyclist-value').textContent = bikes;
+        document.getElementById('people-value').textContent = town.people.length;
         document.getElementById('traffic-value').textContent = `${Math.round(trafficLevel * 100)}%`;
         trafficControl.setAttribute('aria-valuetext', `${buses} buses and ${cars} cars`);
     }
@@ -478,6 +525,8 @@ if (ctx) {
         if (resetView) {
             town = createTown(Math.max(width < 600 ? 1000 : 2200, width * 2), Math.max(1700, height * 2), seed);
             setTrafficLevel(town, trafficLevel);
+            setCyclistCount(town, Number(cyclistControl.value));
+            setPeopleCount(town, Number(peopleControl.value));
             // Start with moving traffic, spread naturally along its lanes.
             for (let i = 0; i < 180; i++) updateTown(town, FIXED_STEP);
         }
@@ -541,6 +590,8 @@ if (ctx) {
         updateTrafficLabels();
         render();
     });
+    cyclistControl.addEventListener('input', () => { setCyclistCount(town, cyclistControl.value); updateTrafficLabels(); render(); });
+    peopleControl.addEventListener('input', () => { setPeopleCount(town, peopleControl.value); updateTrafficLabels(); render(); });
     zoomControl.addEventListener('input', () => { view.setZoom(Number(zoomControl.value)); repaintView(); });
     bindTownGestures(canvas, view, repaintView);
     newButton.addEventListener('click', () => {

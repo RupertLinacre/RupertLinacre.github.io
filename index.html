@@ -85,7 +85,7 @@
             left: 50%;
             transform: translateX(-50%);
             z-index: 3;
-            width: 610px;
+            width: 740px;
             max-width: calc(100% - 28px);
             display: flex;
             flex-direction: column;
@@ -100,7 +100,7 @@
 
         .town-controls[hidden] { display: none; }
         .town-control-header { display: flex; align-items: center; justify-content: flex-end; width: 100%; gap: 16px; }
-        .town-adjustments { display: grid; grid-template-columns: 90px 1fr 1fr; gap: 22px; width: 100%; border-top: 1px solid #e0e5d6; padding-top: 10px; }
+        .town-adjustments { display: grid; grid-template-columns: 65px repeat(4, 1fr); gap: 22px; width: 100%; border-top: 1px solid #e0e5d6; padding-top: 10px; }
         .town-adjustment { min-width: 0; }
         .town-adjustment label { display: flex; justify-content: space-between; gap: 5px; font-size: 10px; font-weight: 600; }
         .town-adjustment output { color: #788773; font-weight: 400; white-space: nowrap; }
@@ -136,6 +136,7 @@
             .town-control-header { flex-direction: column; gap: 10px; }
             .town-adjustments { grid-template-columns: 66px 1fr 1fr; gap: 12px; padding-top: 10px; }
             .town-adjustment label { font-size: 9px; }
+            .town-adjustment:last-child { grid-column: span 2; }
             .town-adjustment input, .town-adjustment select { height: 35px; }
             .town-actions { width: 100%; }
             button { flex: 1; padding: 0 9px; font-size: 11px; min-height: 44px; }
@@ -241,11 +242,19 @@
                 <label for="town-zoom">Zoom <output id="zoom-value" for="town-zoom">100%</output></label>
                 <input type="range" id="town-zoom" min="50" max="150" step="5" value="100" aria-label="Town zoom">
             </div>
+            <div class="town-adjustment">
+                <label for="cyclist-count">Cyclists <output id="cyclist-value" for="cyclist-count">24</output></label>
+                <input type="range" id="cyclist-count" min="0" max="150" step="1" value="24" aria-label="Number of cyclists">
+            </div>
+            <div class="town-adjustment">
+                <label for="people-count">People <output id="people-value" for="people-count">140</output></label>
+                <input type="range" id="people-count" min="0" max="400" step="10" value="140" aria-label="Number of people">
+            </div>
         </div>
     </div>
     <p class="sr-only" id="town-status" role="status" aria-live="polite"></p>
 
-    <script type="module" src="road-animation.js?v=10"></script>
+    <script type="module" src="road-animation.js?v=11"></script>
 </body>
 
 </html>
