@@ -21,162 +21,63 @@
 
         body {
             min-height: 100vh;
-            padding: 32px 20px 240px;
+            padding: 20px;
             position: relative;
+            background: white;
         }
 
         #road-canvas {
             position: fixed;
-            top: 0;
-            left: 0;
+            inset: 0;
             width: 100%;
             height: 100%;
             z-index: 0;
-            pointer-events: none;
+            touch-action: none;
+            cursor: grab;
         }
+        #road-canvas:active { cursor: grabbing; }
 
         .content {
             position: relative;
             z-index: 1;
-            background: rgba(255, 253, 246, 0.95);
-            padding: 34px 38px;
-            border: 1px solid rgba(255, 255, 255, 0.8);
-            box-shadow: 0 8px 40px #314d3b18, 0 1px 5px #314d3b10;
-            border-radius: 18px;
-            max-width: 680px;
+            color: black;
+            font-family: "Times New Roman", Times, serif;
+            font-size: 16px;
+            background: white;
+            padding: 30px 40px;
+            border-radius: 10px;
+            width: fit-content;
+            max-width: 100%;
             margin: 0 auto;
             transition: opacity 180ms ease;
         }
-
-        h1 {
-            font-family: Georgia, "Times New Roman", serif;
-            font-size: clamp(27px, 4vw, 35px);
-            font-weight: 500;
-            letter-spacing: -1.2px;
-            margin-bottom: 10px;
+        .content h1 { font-size: 2em; margin: 0 16px 0.5em 0; }
+        .content h1 span { display: inline-block; }
+        .content h1:hover span { animation: wiggle 0.5s ease-in-out infinite alternate; }
+        @keyframes wiggle { from { transform: rotate(-3deg); } to { transform: rotate(3deg); } }
+        .content h2 { display: inline-block; font-size: 1.5em; margin: 1.2em 0 0.5em; transition: transform 0.2s ease-in-out; }
+        .content h2:hover { transform: rotate(-2deg) scale(1.04); }
+        .content ul { list-style: disc; margin: 0 0 0.5em 1.5em; }
+        .content li { margin-bottom: 0.3em; line-height: 1.5; overflow-wrap: anywhere; }
+        .content li a { position: relative; display: inline-block; }
+        .content li a:hover { animation: bounce 0.4s ease-in-out infinite alternate; }
+        @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-4px); } }
+        .content a:link { color: #0000ee; }
+        .content a:visited { color: #551a8b; }
+        #show-town {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 44px;
+            height: 44px;
+            padding: 0;
+            border: 0;
+            border-radius: 50%;
+            background: #ffffffcc;
+            color: #333;
+            font: 32px/1 system-ui, sans-serif;
         }
-
-        h1 span {
-            display: inline-block;
-        }
-
-        h1:hover span {
-            animation: wiggle 0.5s ease-in-out infinite alternate;
-        }
-
-        @keyframes wiggle {
-            from {
-                transform: rotate(-3deg);
-            }
-
-            to {
-                transform: rotate(3deg);
-            }
-        }
-
-        h2 {
-            display: inline-block;
-            transition: transform 0.2s ease-in-out;
-            font-size: 15px;
-            margin-bottom: 10px;
-        }
-
-        h2:hover {
-            transform: rotate(-2deg) scale(1.04);
-        }
-
-        ul {
-            list-style: none;
-        }
-
-        li {
-            margin-bottom: 6px;
-            line-height: 1.5;
-            font-size: 13px;
-        }
-
-        li a {
-            position: relative;
-            display: inline-block;
-            color: #587568;
-            text-decoration-color: #bdcbbb;
-            text-underline-offset: 3px;
-        }
-
-        li a:hover {
-            color: #b95a42;
-            text-decoration-color: currentColor;
-        }
-
-        @keyframes bounce {
-            from {
-                transform: translateY(0);
-            }
-
-            to {
-                transform: translateY(-4px);
-            }
-        }
-
-        .eyebrow {
-            color: #7e8d76;
-            font-size: 9px;
-            font-weight: 700;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            margin-bottom: 12px;
-        }
-
-        .intro {
-            font-size: 13px;
-            line-height: 1.6;
-            color: #7c8a79;
-            padding-bottom: 25px;
-            border-bottom: 1px solid #e0e5d6;
-        }
-
-        .link-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 25px 32px;
-            padding-top: 25px;
-        }
-
-        .town-label {
-            position: fixed;
-            top: 26px;
-            left: 27px;
-            z-index: 2;
-            padding: 14px 17px;
-            border: 1px solid #fffdf3b3;
-            background: #fffdf0e8;
-            box-shadow: 0 3px 16px #314d3b10;
-            border-radius: 12px;
-            pointer-events: none;
-        }
-
-        .town-label .eyebrow { margin-bottom: 7px; }
-        .town-label p:last-child { font-size: 11px; color: #738272; }
-        .planner-panel { max-width: 280px; border-top: 1px solid #dce2d3; margin-top: 12px; padding-top: 12px; pointer-events: auto; }
-        .planner-panel[hidden] { display: none; }
-        .planner-panel label { display: block; font-size: 10px; margin: 8px 0 4px; }
-        .planner-panel select { width: 100%; font: inherit; font-size: 11px; padding: 6px; color: #355d4c; background: #fffdf4; border: 1px solid #dce2d3; border-radius: 5px; }
-        .planner-panel p { font-size: 11px; line-height: 1.5; margin-top: 8px; }
-        .trip-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .trip-fields label { min-width: 0; }
-        .trip-fields select { margin-top: 4px; }
-        .road-key { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 14px; margin-top: 12px; font-size: 10px; }
-        .road-key span::before { content: ''; display: inline-block; width: 15px; height: 3px; margin: 0 5px 3px 0; background: var(--road); }
-        .planning-trip #road-canvas { pointer-events: auto; cursor: crosshair; }
-        .town-control-footer { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; border-top: 1px solid #e0e5d6; padding-top: 8px; }
-        .town-control-footer p { font-size: 10px; color: #788773; }
-        .town-control-footer strong { color: #476151; font-weight: 600; }
-        #plan-trip { min-height: 34px; flex: none; }
-        .route-key { display: flex; gap: 7px; margin: 12px 0 9px; }
-        .route-key span { color: #fff9eb; font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 4px; }
-        .route-12 { background: #cf5249; }
-        .route-24 { background: #258b8a; }
-        .route-36 { background: #cc933c; }
+        #show-town:hover { background: #e9eedf; }
 
         .town-controls {
             position: fixed;
@@ -198,17 +99,13 @@
         }
 
         .town-controls[hidden] { display: none; }
-        .town-control-header { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 16px; }
+        .town-control-header { display: flex; align-items: center; justify-content: flex-end; width: 100%; gap: 16px; }
         .town-adjustments { display: grid; grid-template-columns: 90px 1fr 1fr; gap: 22px; width: 100%; border-top: 1px solid #e0e5d6; padding-top: 10px; }
         .town-adjustment { min-width: 0; }
         .town-adjustment label { display: flex; justify-content: space-between; gap: 5px; font-size: 10px; font-weight: 600; }
         .town-adjustment output { color: #788773; font-weight: 400; white-space: nowrap; }
         .town-adjustment input { width: 100%; height: 30px; accent-color: #355d4c; cursor: pointer; margin: 0; }
         .town-adjustment select { width: 100%; height: 30px; background: #f6f7ee; border: 1px solid #dce2d3; border-radius: 5px; color: #355d4c; font: inherit; font-size: 11px; margin-top: 3px; padding: 0 7px; }
-        .town-caption { font-size: 12px; white-space: nowrap; }
-        .town-caption small { display: block; font-size: 10px; color: #85907c; margin-top: 4px; }
-        .live-dot { display: inline-block; width: 6px; height: 6px; background: #79a275; border-radius: 50%; margin-right: 5px; }
-        .town-paused .live-dot { background: #c6a368; }
         .town-actions { display: flex; gap: 6px; }
 
         button {
@@ -234,31 +131,14 @@
         .exploring-town .content { opacity: 0; visibility: hidden; pointer-events: none; }
         .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-        @media (max-width: 1120px) {
-            .town-label { display: none; }
-            .exploring-town .town-label { display: block; }
-        }
-
         @media (max-width: 600px) {
-            body { padding: 16px 14px 280px; }
-            .content { padding: 25px 23px; border-radius: 14px; }
-            .link-grid { grid-template-columns: 1fr; gap: 23px; }
-            li { font-size: 14px; margin-bottom: 9px; }
-            h2 { font-size: 16px; }
             .town-controls { bottom: max(12px, env(safe-area-inset-bottom)); padding: 12px; flex-direction: column; gap: 10px; width: 370px; }
             .town-control-header { flex-direction: column; gap: 10px; }
             .town-adjustments { grid-template-columns: 66px 1fr 1fr; gap: 12px; padding-top: 10px; }
             .town-adjustment label { font-size: 9px; }
             .town-adjustment input, .town-adjustment select { height: 35px; }
-            .town-caption { text-align: center; font-size: 11px; }
-            .town-caption small { display: none; }
             .town-actions { width: 100%; }
             button { flex: 1; padding: 0 9px; font-size: 11px; min-height: 44px; }
-            .town-label { top: 16px; left: 16px; }
-            .planning-trip .town-label { right: 16px; padding: 12px; }
-            .planning-trip .town-label > p, .planning-trip .town-label > .route-key { display: none; }
-            .planning-trip .planner-panel { border: 0; padding-top: 0; margin-top: 0; max-width: none; }
-            .planning-trip #planner-help { font-size: 10px; }
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -269,29 +149,9 @@
 
 <body>
     <canvas id="road-canvas" aria-hidden="true"></canvas>
-    <aside class="town-label" aria-label="About the generated town">
-        <p class="eyebrow" id="town-number">A little town</p>
-        <p>Every visit, a new neighbourhood.</p>
-        <div class="route-key" aria-label="Bus routes 12, 24 and 36"><span class="route-12">12</span><span class="route-24">24</span><span class="route-36">36</span></div>
-        <p><span id="bus-count">Buses</span> &middot; <span id="car-count">cars</span> &middot; a little everyday life</p>
-        <div class="planner-panel" id="planner-panel" hidden>
-            <strong>Plan a trip</strong>
-            <p id="planner-help">Choose two places on the map, or use the places below. Zoom out to see more.</p>
-            <div class="trip-fields">
-                <label for="trip-from">From<select id="trip-from"><option value="">Choose a starting point</option></select></label>
-                <label for="trip-to">To<select id="trip-to"><option value="">Choose a destination</option></select></label>
-            </div>
-            <p id="trip-result" role="status">Routes adapt to the traffic.</p>
-            <div class="road-key" aria-label="Street types">
-                <span style="--road:#d0a34e">Arterial</span><span style="--road:#8eb4ad">Local main road</span>
-                <span style="--road:#d7decb">Residential</span><span style="--road:#c58e72">Single track</span>
-            </div>
-        </div>
-    </aside>
     <main class="content" id="page-content">
-        <p class="eyebrow">Buses, games &amp; little discoveries</p>
+        <button type="button" id="show-town" aria-label="Hide links and explore the town" aria-controls="town-controls" hidden><span aria-hidden="true">&times;</span></button>
         <h1><span>Welcome to Rupert's Page</span></h1>
-        <p class="intro">A few things to play, explore and get curious about.</p>
         <div class="link-grid">
         <section>
         <h2>Bus Website</h2>
@@ -357,7 +217,6 @@
 
     <div class="town-controls" id="town-controls" role="group" aria-label="Town animation controls" hidden>
         <div class="town-control-header">
-        <div class="town-caption"><span class="live-dot" aria-hidden="true"></span><span id="town-state">A little town, alive</span><small>Made afresh, just for this visit.</small></div>
         <div class="town-actions">
             <button type="button" id="pause-town" aria-label="Pause town animation" aria-pressed="false">Pause</button>
             <button type="button" id="explore-town" aria-pressed="false">Watch the town</button>
@@ -381,14 +240,10 @@
                 <input type="range" id="town-zoom" min="50" max="150" step="5" value="100" aria-label="Town zoom">
             </div>
         </div>
-        <div class="town-control-footer">
-            <p><strong id="traffic-state">Flowing</strong> &middot; <span id="queue-count">0 waiting</span><br>Turn traffic up for rush hour.</p>
-            <button type="button" id="plan-trip" aria-expanded="false" aria-controls="planner-panel">Plan a trip</button>
-        </div>
     </div>
     <p class="sr-only" id="town-status" role="status" aria-live="polite"></p>
 
-    <script type="module" src="road-animation.js?v=5"></script>
+    <script type="module" src="road-animation.js?v=10"></script>
 </body>
 
 </html>

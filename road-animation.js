@@ -1,5 +1,5 @@
-import { createTown, updateTown, setTrafficLevel, updateTrafficMetrics, vehiclePoint, lanePoint, signalState, randomSource, pathPoint, offsetPath, findRoute, makeTurn, isRoundabout } from './road-world.mjs?v=5';
-import { ROAD_TYPES } from './traffic-planner.mjs';
+import { TownView, bindTownGestures } from './town-view.mjs';
+import { createTown, updateTown, setTrafficLevel, updateTrafficMetrics, vehiclePoint, lanePoint, signalState, randomSource, pathPoint, offsetPath, isRoundabout } from './road-world.mjs?v=5';
 
 const canvas = document.getElementById('road-canvas');
 const ctx = canvas?.getContext('2d');
@@ -8,6 +8,8 @@ if (ctx) {
     const scenery = document.createElement('canvas');
     const background = scenery.getContext('2d');
     const pauseButton = document.getElementById('pause-town');
+    const showTownButton = document.getElementById('show-town');
+    const controls = document.getElementById('town-controls');
     const exploreButton = document.getElementById('explore-town');
     const newButton = document.getElementById('new-town');
     const status = document.getElementById('town-status');
@@ -15,21 +17,11 @@ if (ctx) {
     const speedControl = document.getElementById('simulation-speed');
     const trafficControl = document.getElementById('traffic-level');
     const zoomControl = document.getElementById('town-zoom');
-    const plannerButton = document.getElementById('plan-trip');
-    const tripFrom = document.getElementById('trip-from');
-    const tripTo = document.getElementById('trip-to');
-    let planning = false;
-    let origin = null;
-    let destination = null;
-    let trip = null;
-    let lastMetrics = -1;
     const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
     let paused = motionPreference.matches;
     let exploring = false;
     let town;
-    let scale = 1;
-    let cameraX = 0;
-    let cameraY = 0;
+    const view = new TownView();
     let simulationSpeed = 1;
     let trafficLevel = 1;
     let dpr = 1;
@@ -83,12 +75,12 @@ if (ctx) {
     }
 
     function worldTransform(g) {
-        g.setTransform(dpr * scale, 0, 0, dpr * scale, -cameraX * dpr * scale, -cameraY * dpr * scale);
+        g.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, -view.x * dpr * view.scale, -view.y * dpr * view.scale);
     }
 
     function visible(p, margin = 50) {
-        return p.x > cameraX - margin && p.x < cameraX + window.innerWidth / scale + margin &&
-            p.y > cameraY - margin && p.y < cameraY + window.innerHeight / scale + margin;
+        return p.x > view.x - margin && p.x < view.x + window.innerWidth / view.scale + margin &&
+            p.y > view.y - margin && p.y < view.y + window.innerHeight / view.scale + margin;
     }
 
     function tree(g, x, y, radius, random) {
@@ -442,107 +434,32 @@ if (ctx) {
     }
 
     function render() {
-        if (lastMetrics !== town.metricsAt) {
-            lastMetrics = town.metricsAt;
-            document.getElementById('traffic-state').textContent = town.metrics.status;
-            document.getElementById('queue-count').textContent = `${town.metrics.queued} waiting`;
-            if (planning && origin && destination) calculateTrip();
-        }
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(scenery, 0, 0);
         worldTransform(ctx);
-        if (planning) drawPlanner();
         town.vehicles.forEach(drawVehicle);
         for (const lane of town.lanes) if (lane.to.signal) drawSignal(lane);
-    }
-
-    function drawPlanner() {
-        ctx.save();
-        ctx.lineCap = 'round';
-        for (const edge of town.edges) {
-            strokePath(ctx, offsetPath(edge.path, 0, edge.a.radius, edge.path.length - edge.b.radius),
-                ROAD_TYPES[edge.roadType].mapColour, edge.roadType === 'arterial' ? 4 : 2);
-        }
-        if (trip) {
-            const paths = trip.path.flatMap((lane, i) => i ? [makeTurn(trip.path[i - 1], lane), lane.path] : [lane.path]);
-            for (const path of paths) strokePath(ctx, path, '#fff8e9', 8);
-            for (const path of paths) strokePath(ctx, path, '#288ec1', 4);
-        }
-        for (const [node, label] of [[origin, 'A'], [destination, 'B']]) {
-            if (!node) continue;
-            const radius = 12 / scale;
-            circle(ctx, node.x, node.y, radius + 2 / scale, '#fff8e9');
-            circle(ctx, node.x, node.y, radius, '#2879a1');
-            ctx.font = `bold ${12 / scale}px system-ui, sans-serif`;
-            ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff8e9';
-            ctx.fillText(label, node.x, node.y);
-        }
-        ctx.restore();
-    }
-
-    function resetTrip() {
-        origin = destination = trip = null;
-        const names = ['Town centre', 'East neighbourhood', 'South-east neighbourhood', 'South neighbourhood',
-            'South-west neighbourhood', 'West neighbourhood', 'North-west neighbourhood', 'North neighbourhood', 'North-east neighbourhood'];
-        for (const [select, placeholder] of [[tripFrom, 'Choose a starting point'], [tripTo, 'Choose a destination']]) {
-            select.replaceChildren(new Option(placeholder, ''));
-            town.network.hubs.forEach((node, i) => select.add(new Option(names[i] || `Junction ${node.id + 1}`, node.id)));
-        }
-        calculateTrip();
-    }
-
-    function calculateTrip() {
-        const result = document.getElementById('trip-result');
-        if (!origin || !destination) {
-            trip = null;
-            result.textContent = origin ? 'Now choose your destination.' : 'Routes adapt to the traffic.';
-            return;
-        }
-        trip = findRoute(origin, destination);
-        const arterial = trip.path.filter(lane => lane.edge.roadType === 'arterial').length;
-        result.textContent = origin === destination ? 'Choose a different destination.' :
-            `Blue route · about ${Math.round(trip.seconds)} simulated seconds · ${trip.path.length} streets, ${arterial} arterial. Live traffic included.`;
-    }
-
-    function setPlanning(value) {
-        planning = value;
-        if (planning && !exploring) toggleExplore();
-        document.body.classList.toggle('planning-trip', planning);
-        document.getElementById('planner-panel').hidden = !planning;
-        plannerButton.textContent = planning ? 'Close planner' : 'Plan a trip';
-        plannerButton.setAttribute('aria-expanded', String(planning));
-        render();
     }
 
     function updateLabels() {
         pauseButton.textContent = paused ? 'Resume' : 'Pause';
         pauseButton.setAttribute('aria-label', paused ? 'Resume town animation' : 'Pause town animation');
         pauseButton.setAttribute('aria-pressed', String(paused));
-        document.getElementById('town-state').textContent = paused ? 'Town paused' : 'A little town, alive';
-        document.body.classList.toggle('town-paused', paused);
     }
 
     function updateTrafficLabels() {
         const buses = town.vehicles.filter(v => v.bus).length;
         const cars = town.vehicles.length - buses;
-        document.getElementById('bus-count').textContent = `${buses} buses`;
-        document.getElementById('car-count').textContent = `${cars} cars`;
         document.getElementById('traffic-value').textContent = `${Math.round(trafficLevel * 100)}%`;
         trafficControl.setAttribute('aria-valuetext', `${buses} buses and ${cars} cars`);
     }
 
-    function updateView() {
-        const zoom = Number(zoomControl.value) / 100;
-        const baseScale = window.innerWidth < 600 ? 0.78 : 1;
-        // The lower end always fits the whole town, including after a resize.
-        const fitScale = Math.min(window.innerWidth / town.width, window.innerHeight / town.height);
-        scale = zoom < 1 ? fitScale + (baseScale - fitScale) * (zoom - 0.5) / 0.5 : baseScale * zoom;
-        cameraX = (town.width - window.innerWidth / scale) / 2;
-        cameraY = (town.height - window.innerHeight / scale) / 2;
-        const percent = Math.round(scale / baseScale * 100);
-        document.getElementById('zoom-value').textContent = zoom === 0.5 ? 'Whole town' : `${percent}%`;
-        zoomControl.setAttribute('aria-valuetext', zoom === 0.5 ? 'Whole town' : `${percent} percent`);
+    function repaintView() {
+        zoomControl.value = String(view.value);
+        const label = view.value === 50 ? 'Whole town' : `${Math.round(view.scale / view.base * 100)}%`;
+        document.getElementById('zoom-value').textContent = label;
+        zoomControl.setAttribute('aria-valuetext', label === 'Whole town' ? label : `${Math.round(view.scale / view.base * 100)} percent`);
         drawScenery();
         render();
     }
@@ -557,15 +474,15 @@ if (ctx) {
         dpr = nextDpr;
         canvas.width = scenery.width = Math.round(width * dpr);
         canvas.height = scenery.height = Math.round(height * dpr);
-        if (!town || force) {
+        const resetView = !town || force;
+        if (resetView) {
             town = createTown(Math.max(width < 600 ? 1000 : 2200, width * 2), Math.max(1700, height * 2), seed);
             setTrafficLevel(town, trafficLevel);
             // Start with moving traffic, spread naturally along its lanes.
             for (let i = 0; i < 180; i++) updateTown(town, FIXED_STEP);
-            resetTrip();
         }
-        updateView();
-        document.getElementById('town-number').textContent = `Town ${seed.toString(36).slice(-4).toUpperCase().padStart(4, '0')}`;
+        view.configure(width, height, town.width, town.height, resetView);
+        repaintView();
         updateTrafficLabels();
         accumulator = 0;
         lastTime = 0;
@@ -597,13 +514,16 @@ if (ctx) {
         exploring = !exploring;
         if (exploring) savedScroll = window.scrollY;
         document.body.classList.toggle('exploring-town', exploring);
+        controls.hidden = !exploring;
         content.inert = exploring;
         content.setAttribute('aria-hidden', String(exploring));
         exploreButton.textContent = exploring ? 'Back to links' : 'Watch the town';
         exploreButton.setAttribute('aria-pressed', String(exploring));
         if (!exploring) {
-            setPlanning(false);
+            showTownButton.focus({ preventScroll: true });
             window.scrollTo(0, savedScroll);
+        } else {
+            exploreButton.focus({ preventScroll: true });
         }
     }
 
@@ -618,38 +538,21 @@ if (ctx) {
         trafficLevel = Number(trafficControl.value) / 100;
         setTrafficLevel(town, trafficLevel);
         updateTrafficMetrics(town);
-        lastMetrics = -1;
         updateTrafficLabels();
         render();
     });
-    zoomControl.addEventListener('input', updateView);
+    zoomControl.addEventListener('input', () => { view.setZoom(Number(zoomControl.value)); repaintView(); });
+    bindTownGestures(canvas, view, repaintView);
     newButton.addEventListener('click', () => {
         seed = newSeed();
         resize(true);
         status.textContent = 'A new town is ready. New streets, neighbourhoods and bus routes.';
     });
     exploreButton.addEventListener('click', toggleExplore);
-    plannerButton.addEventListener('click', () => setPlanning(!planning));
-    for (const select of [tripFrom, tripTo]) select.addEventListener('change', () => {
-        origin = tripFrom.value === '' ? null : town.nodes.find(n => n.id === Number(tripFrom.value));
-        destination = tripTo.value === '' ? null : town.nodes.find(n => n.id === Number(tripTo.value));
-        calculateTrip(); render();
-    });
-    canvas.addEventListener('click', event => {
-        if (!planning) return;
-        const x = event.clientX / scale + cameraX, y = event.clientY / scale + cameraY;
-        const node = town.nodes.reduce((a, b) => Math.hypot(a.x - x, a.y - y) < Math.hypot(b.x - x, b.y - y) ? a : b);
-        if (!origin || destination) { origin = node; destination = null; tripTo.value = ''; }
-        else destination = node;
-        const select = destination ? tripTo : tripFrom;
-        if (![...select.options].some(option => option.value === String(node.id))) select.add(new Option(`Junction ${node.id + 1}`, node.id));
-        select.value = node.id;
-        calculateTrip(); render();
-    });
+    showTownButton.addEventListener('click', toggleExplore);
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape' && exploring) {
             toggleExplore();
-            exploreButton.focus();
         }
     });
     document.addEventListener('visibilitychange', syncAnimation);
@@ -662,6 +565,6 @@ if (ctx) {
         resizeTimer = setTimeout(() => resize(), 180);
     });
     resize();
-    document.getElementById('town-controls').hidden = false;
+    showTownButton.hidden = false;
     syncAnimation();
 }

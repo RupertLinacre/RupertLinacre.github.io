@@ -5,20 +5,17 @@ The background is a procedural miniature town with sweeping circular arcs,
 crescents, irregular neighbourhoods, left-hand traffic, three
 numbered bus circuits, bus stops, roundabouts, mini-roundabouts, give-way
 junctions, single-track bottlenecks, and working traffic lights. Every visit (or
-**New town** click) generates fresh streets and neighbourhoods. **Watch the town**
-hides the links; **Escape** brings them back. **Pause** freezes the simulation.
+**New town** click) generates fresh streets and neighbourhoods. The top-right **×** hides the original-style listing and reveals the town controls.
+**Back to links** or **Escape** restores the listing and hides the controls.
+Drag the visible town to pan and pinch to zoom in either view. Trackpad scrolling
+pans; trackpad pinch zooms. The zoom slider stays in sync and zooms around the
+current view. Gestures on the links panel retain normal page scrolling. **Pause** freezes the simulation.
 Reduced-motion preferences pause it automatically, and hidden tabs stop rendering.
 
 The controls adjust speed from **0.5× to 8×**, add or remove traffic from **0% to
 600%**, and zoom from the **whole town** to **150%**. Zooming and resizing preserve
 the current town and its traffic. Traffic changes insert vehicles into safe gaps
 and release junction reservations when vehicles are removed.
-
-**Plan a trip** reveals the street hierarchy. Choose two places on the map or
-use the From/To menus for a route that accounts for road speeds and current
-queues. Blue marks the planned route; gold marks arterial corridors. The
-estimated time uses simulation seconds. Turn traffic up to create queues that
-spill back from junctions, and watch the live waiting count and congestion status.
 
 Run locally with `python3 -m http.server 4173`, then open
 <http://localhost:4173>. There is no build step or external runtime dependency.
