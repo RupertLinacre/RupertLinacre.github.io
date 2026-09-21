@@ -10,10 +10,18 @@ export function startJourney(town, person, queued = false) {
     person.destination = stops[(index + 1 + Math.floor(town.random() * (stops.length - 1))) % stops.length];
     person.route = route.number;
     person.state = queued ? 'queue' : 'walking';
-    person.distance = queued ? person.lane.stop.distance : Math.max(5, person.lane.stop.distance - 30 - town.random() * 85);
+    person.distance = queued ? person.lane.stop.distance : Math.max(5, person.lane.stop.distance * town.random());
     person.bus = null;
     if (queued) person.lane.stop.queue.push(person);
 }
+function startStroll(town, person) {
+    const lanes = town.lanes.filter(l => !l.edge.singleTrack && l.length > 70);
+    const lane = lanes[Math.floor(town.random() * lanes.length)];
+    if (!lane) { startJourney(town, person); return; }
+    Object.assign(person, { state: 'strolling', lane, distance: 10 + town.random() * (lane.length - 20),
+        direction: town.random() < 0.5 ? -1 : 1, pause: 0, bus: null });
+}
+
 export function setPeopleCount(town, count) {
     count = Math.max(0, Math.min(400, Math.round(Number(count) || 0)));
     town.people ||= []; town.nextPersonId ||= 0;
@@ -25,12 +33,25 @@ export function setPeopleCount(town, count) {
     while (town.people.length < count) {
         const id = town.nextPersonId++;
         const person = { id, colour: COLOURS[id % COLOURS.length], speed: 7 + town.random() * 4, trips: 0 };
-        town.people.push(person); startJourney(town, person, town.random() < 0.65);
+        town.people.push(person);
+        if (id % 2 === 0) startStroll(town, person);
+        else startJourney(town, person, town.random() < 0.35);
     }
 }
 export function updatePeople(town, dt) {
     for (const person of town.people || []) {
-        if (person.state === 'walking') {
+        if (person.state === 'strolling') {
+            // Walk the length of the pavement in both directions, staying clear
+            // of junctions. Keep an ongoing population out walking, even when
+            // every bus passenger has reached their stop.
+            if (person.pause > 0) { person.pause -= dt; continue; }
+            person.distance += person.direction * person.speed * dt;
+            if (person.distance >= person.lane.length - 8 || person.distance <= 8) {
+                person.distance = Math.max(8, Math.min(person.lane.length - 8, person.distance));
+                person.direction *= -1;
+                person.pause = 0.6 + town.random() * 1.5;
+            }
+        } else if (person.state === 'walking') {
             person.distance = Math.min(person.lane.stop.distance, person.distance + person.speed * dt);
             if (person.distance === person.lane.stop.distance) {
                 person.state = 'queue'; person.lane.stop.queue.push(person);

@@ -93,3 +93,20 @@ test('oncoming traffic prevents a pass; a car follows at cycling speed', () => {
     assert.ok(car.distance < bike.distance - (car.length + bike.length) / 2);
     assert.ok(car.speed <= bike.maxSpeed + 1);
 });
+
+
+test('people keep walking on pavements throughout town as well as waiting for buses', () => {
+    const town = createTown(2400, 1700, 42); setPeopleCount(town, 140);
+    const walkers = town.people.filter(p => p.state === 'strolling');
+    assert.equal(walkers.length, 70);
+    assert.ok(walkers.some(p => !p.lane.stop), 'pavement walkers are not limited to bus-stop streets');
+    assert.ok(new Set(walkers.map(p => p.lane.id)).size > 20);
+    assert.ok(walkers.some(p => p.direction === -1) && walkers.some(p => p.direction === 1));
+    const positions = walkers.map(p => p.distance);
+    advance(town, 3);
+    assert.ok(walkers.every((p, i) => Math.abs(p.distance - positions[i]) > 0.1));
+    advance(town, 90);
+    assert.ok(walkers.every(p => p.state === 'strolling' && p.distance >= 8 && p.distance <= p.lane.length - 8));
+    assert.ok(town.people.some(p => p.state === 'queue' || p.state === 'riding'));
+    setPeopleCount(town, 0); assert.equal(town.people.length, 0);
+});

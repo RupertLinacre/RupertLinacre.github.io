@@ -25,7 +25,9 @@ cyclist if they cannot finish a pass. Roundabout gap checks account for cyclists
 lower speeds.
 
 **People** sets 0–400 residents, including people walking, queuing and riding.
-They walk to a stop, queue for their route, board one at a time, and alight at a
+Half keep strolling along pavements throughout town, including streets without
+bus stops, walking in both directions and turning back before junctions. The
+others walk to a stop, queue for their route, board one at a time, and alight at a
 later stop. Each boarding adds 0.85 simulated seconds and each alighting adds
 0.65 seconds to the stop. Buses hold 18 passengers; full buses leave remaining
 people waiting. A small count appears above a stopped bus. Population changes

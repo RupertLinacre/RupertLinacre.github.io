@@ -386,15 +386,18 @@ if (ctx) {
     function drawPeople() {
         for (const person of town.people) {
             if (person.state === 'riding' || !person.lane) continue;
-            const queue = person.lane.stop.queue;
+            const queue = person.lane.stop?.queue || [];
             const index = person.state === 'queue' ? queue.indexOf(person) : -1;
             const distance = index < 0 ? person.distance : Math.max(3, person.lane.stop.distance - (index % 10) * 6);
             const p = lanePoint(person.lane, distance);
-            const pavement = 25 + (index < 0 ? 0 : Math.floor(index / 10) * 7);
+            const edge = person.lane.edge;
+            const normal = edge.width / 2 - edge.offset + 3;
+            const nearStop = person.lane.stop ? Math.max(0, 1 - Math.abs(distance - person.lane.stop.distance) / 24) : 0;
+            const pavement = index < 0 ? normal + (25 - normal) * nearStop : 25 + Math.floor(index / 10) * 7;
             const x = p.x + Math.sin(p.angle) * pavement, y = p.y - Math.cos(p.angle) * pavement;
             if (!visible({ x, y })) continue;
-            const stride = index < 0 ? Math.sin(town.time * person.speed + person.id) * 1.5 : 0;
-            ctx.save(); ctx.translate(x, y); ctx.rotate(p.angle);
+            const stride = index < 0 && !(person.pause > 0) ? Math.sin(town.time * person.speed + person.id) * 1.5 : 0;
+            ctx.save(); ctx.translate(x, y); ctx.rotate(p.angle + (person.direction === -1 ? Math.PI : 0));
             circle(ctx, 1, 2, 3.8, '#304b3c25');
             line(ctx, -3 + stride, -1.5, 0, -1, '#40504b', 1.7);
             line(ctx, -3 - stride, 1.5, 0, 1, '#40504b', 1.7);

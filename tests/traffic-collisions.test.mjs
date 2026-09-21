@@ -64,7 +64,7 @@ test('cyclists and overtaking cars remain separated in mixed traffic with passen
             }
             const queued = town.lanes.flatMap(l => l.stop?.queue || []);
             const riders = town.vehicles.flatMap(v => v.passengers || []);
-            const walkers = town.people.filter(p => p.state === 'walking' || p.state === 'leaving');
+            const walkers = town.people.filter(p => p.state === 'strolling' || p.state === 'walking' || p.state === 'leaving');
             assert.equal(new Set([...queued, ...riders, ...walkers]).size, town.people.length);
             assert.equal(queued.length + riders.length + walkers.length, town.people.length);
         }
